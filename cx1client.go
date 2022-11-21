@@ -279,12 +279,12 @@ func (c Cx1client) StartZipScan( projectId string, uploadUrl string, tags map[st
 
 // GetScans returns all scan status on the project addressed by projectID
 // todo cleanup systeminstance
-func (sys *SystemInstance) GetScan(scanID string) (Scan, error) {
+func (c *Cx1client) GetScan(scanID string) (Scan, error) {
     var scan Scan
 
-    data, err := sendRequest(sys, http.MethodGet, fmt.Sprintf("/scans/%v", scanID), nil, http.Header{}, []int{})
+    data, err := c.get( fmt.Sprintf("/scans/%v", scanID) )
     if err != nil {
-        sys.logger.Errorf("Failed to fetch scan with ID %v: %s", scanID, err)
+        lo.Errorf("Failed to fetch scan with ID %v: %s", scanID, err)
         return scan, errors.Wrapf(err, "failed to fetch scan with ID %v", scanID)
     }
 
