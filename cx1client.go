@@ -14,6 +14,9 @@ import (
 	"strconv"
 )
 
+
+var cxOrigin = "Cx1-Golang-Client"
+
 func init() {
 	
 }
@@ -140,22 +143,51 @@ type WorkflowLog struct {
 }
 
 
+// Main entry for users of this client:
+
+
+func NewOAuthClient( base_url string, iam_url string, tenant string, client_id string, client_secret string ) (*Cx1client, error) {
+    token, err := GetTokenOIDC( iam_url, tenant, client_id, client_secret )
+    if err != nil {
+        return nil, err
+    }
+	cli := Cx1client{ &http.Client{}, token, base_url, iam_url, tenant }
+	return &cli, nil
+}
+
+func NewAPIKeyClient(base_url string, iam_url string, tenant string, api_key string ) (*Cx1client, error) {
+    token, err := GetTokenAPIKey( iam_url, tenant, api_key )
+    if err != nil {
+        return nil, err
+    }
+
+	cli := Cx1client{ &http.Client{}, token, base_url, iam_url, tenant }
+	return &cli, nil
+}
+
+// Create a client from a pre-generated token
+func New( token string, base_url string, iam_url string, tenant string ) *Cx1client {
+	cli := Cx1client{ &http.Client{}, token, base_url, iam_url, tenant }
+	return &cli
+}
+
+
 // internal calls
 
-func (c Cx1client) get( api string ) (string,error) {
+func (c Cx1client) get( api string ) ([]byte,error) {
 
 	cx1_req, err := http.NewRequest(http.MethodGet, c.baseUrl + api, nil)
 	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
 	
 	res, err := c.httpClient.Do( cx1_req );
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}	
 	defer res.Body.Close()
 
@@ -163,35 +195,28 @@ func (c Cx1client) get( api string ) (string,error) {
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
-	return string(resBody), nil
+	return resBody, nil
 }
-func (c Cx1client) post( api string, data map[string]interface{} ) (string,error) {
-	jsonBody, err := json.Marshal(data)
+
+func (c Cx1client) requestBytes( method string, api string, data []byte ) ([]byte,error) {
+    cx1_req, err := http.NewRequest(method, c.baseUrl + api, bytes.NewReader( data ) )
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
-	}
-	cx1_req, err := http.NewRequest(http.MethodPost, c.baseUrl + api, strings.NewReader( string(jsonBody) ) )
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
 	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
 	cx1_req.Header.Add( "Content-Type", "application/json" )
 
-	log.Trace( "Posting to " + api + ": " + string(jsonBody) )
-
-	
-
+	log.Trace( "Sending " + method + " request to " + api )
 	
 	res, err := c.httpClient.Do( cx1_req );
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}	
 	defer res.Body.Close()
 
@@ -199,20 +224,30 @@ func (c Cx1client) post( api string, data map[string]interface{} ) (string,error
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
-	return string(resBody), nil
+	return resBody, nil
 }
 
-func (c Cx1client) getIAM( api_base string, api string ) (string, error) {
+func (c Cx1client) request( method string, api string, data map[string]interface{} ) ([]byte,error) {
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		log.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+    return c.requestBytes( method, api, jsonBody )	
+}
+
+func (c Cx1client) getIAM( api_base string, api string ) ([]byte, error) {
 	rurl := c.iamUrl + api_base + c.tenant + api
 	log.Trace( "Get from IAM " + rurl )
 	cx1_req, err := http.NewRequest(http.MethodGet,rurl, nil)
 	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
 	
@@ -221,25 +256,25 @@ func (c Cx1client) getIAM( api_base string, api string ) (string, error) {
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
 	resBody,err := ioutil.ReadAll( res.Body )
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
-	return string(resBody), nil
+	return resBody, nil
 }
-func (c Cx1client) postIAM( api_base string, api string, data map[string]interface{} ) (string,error) {
+func (c Cx1client) postIAM( api_base string, api string, data map[string]interface{} ) ([]byte,error) {
 	rurl := c.iamUrl + api_base + c.tenant + api
 
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 	log.Trace( "Posting to IAM " + rurl + ": " + string(jsonBody) )
 
@@ -249,7 +284,7 @@ func (c Cx1client) postIAM( api_base string, api string, data map[string]interfa
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
 	res, err := c.httpClient.Do( cx1_req );
@@ -257,33 +292,33 @@ func (c Cx1client) postIAM( api_base string, api string, data map[string]interfa
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
 	resBody,err := ioutil.ReadAll( res.Body )
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
-	return string(resBody), nil
+	return resBody, nil
 }
 
 // special call for zip-upload 
-func (c Cx1client) PutFile( URL string, filename string ) (string,error) {
+func (c Cx1client) PutFile( URL string, filename string ) ([]byte,error) {
 	log.Trace( "Putting file " + filename + " to " + URL )
 
 	fileContents, err := ioutil.ReadFile(filename)
     if err != nil {
     	log.Error("Failed to Read the File "+ filename + ": " + err.Error())
-		return "", err
+		return []byte{}, err
     }
 
 	cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader( fileContents ) )
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
 	cx1_req.Header.Add( "Content-Type", "application/zip" )
@@ -295,7 +330,7 @@ func (c Cx1client) PutFile( URL string, filename string ) (string,error) {
 	res, err := c.httpClient.Do( cx1_req );
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 	defer res.Body.Close()
 
@@ -304,18 +339,14 @@ func (c Cx1client) PutFile( URL string, filename string ) (string,error) {
 
 	if err != nil {
 		log.Error( "Error: " + err.Error() )
-		return "", err
+		return []byte{}, err
 	}
 
-	return string(resBody), nil
+	return resBody, nil
 }
 
 // Authentication and init
 
-func New( token string, base_url string, iam_url string, tenant string ) *Cx1client {
-	cli := Cx1client{ &http.Client{}, token, base_url, iam_url, tenant }
-	return &cli
-}
 
 func GetTokenOIDC( iam_url string, tenant string, client_id string, client_secret string ) (string, error) {
 	login_url := iam_url + "/auth/realms/" + tenant + "/protocol/openid-connect/token"
@@ -422,15 +453,13 @@ func (c Cx1client) CreateGroup ( groupname string ) (Group, error) {
 	data := map[string]interface{} {
 		"name" : groupname,
 	}
-	
 
-	response, err := c.postIAM( "/auth/admin/realms/", "/groups", data )
+	_, err := c.postIAM( "/auth/admin/realms/", "/groups", data )
     if err != nil {
         log.Error( "Error creating group: " + err.Error() )
         return Group{}, nil
     }
 
-	log.Trace( " - response: " + response )
 	return c.GetGroupByName( groupname )
 }
 
@@ -504,14 +533,13 @@ func (c Cx1client) CreateProject ( projectname string, cx1_group_id string, tags
 	}
 
     var project Project
-	response, err := c.post( "/api/projects", data )
+	response, err := c.request( http.MethodPost, "/api/projects", data )
 	if err != nil {
-		log.Info( " - response: " + response )
         log.Error( "Error while creating project: " + err.Error() )
         return project, err
 	}
     
-    err = json.Unmarshal( []byte( response ), &project )        
+    err = json.Unmarshal( response, &project )        
 
 	return project, err
 }
@@ -530,7 +558,18 @@ func (c *Cx1client) GetProjects () ([]Project, error) {
     return Projects, err
 	
 }
+func (c *Cx1client) GetProjectByID(projectID string) (Project, error) {
+    log.Debugf("Getting Project with ID %v...", projectID)
+    var project Project
 
+    data, err := c.get( fmt.Sprintf("/projects/%v", projectID) )
+    if err != nil {
+        return project, errors.Wrapf(err, "fetching project %v failed", projectID)
+    }
+
+    err = json.Unmarshal( []byte(data) , &project)
+    return project, err
+}
 func (c Cx1client) GetProjectByName ( projectname string ) (Project,error) {
 	log.Debug( "Get Project By Name: " + projectname )
     response, err := c.get( "/api/projects?name=" + url.QueryEscape(projectname) )
@@ -555,6 +594,124 @@ func (c Cx1client) GetProjectByName ( projectname string ) (Project,error) {
 
 	return Project{}, errors.New( "No such project found" )
 }
+func (c *Cx1client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Project, error) {
+    log.Debugf("Getting projects with name %v of group %v...", projectName, groupID)
+    
+    var projectResponse struct {
+        TotalCount      int     `json:"totalCount"`
+        FilteredCount   int     `json:"filteredCount"`
+        Projects        []Project `json:"projects"`
+    } 
+
+    var data []byte
+    var err error
+
+    body := url.Values{}
+    if len(groupID) > 0 {
+        body.Add( "groups", groupID )
+    }
+    if len(projectName) > 0 {
+        body.Add( "name", projectName )
+    }
+
+
+    if len(body) > 0 {
+        data, err = c.get( fmt.Sprintf("/projects/?%v", body.Encode()) )
+    } else {
+        data, err = c.get( "/projects/" )
+    }
+    if err != nil {
+        return projectResponse.Projects, errors.Wrapf(err, "fetching project %v failed", projectName)
+    }
+
+    err = json.Unmarshal( data, &projectResponse)
+    return projectResponse.Projects, err
+}
+
+
+
+// New for Cx1
+func (c *Cx1client) GetProjectConfiguration(projectID string) ([]ProjectConfigurationSetting, error) {
+    log.Debug("Getting project configuration")
+    var projectConfigurations []ProjectConfigurationSetting
+    params := url.Values{
+        "project-id":   {projectID},
+    }
+    data, err := c.get( fmt.Sprintf( "/configuration/project?%v", params.Encode() ) )
+
+    if err != nil {
+        log.Errorf("Failed to get project configuration for project ID %v: %s", projectID, err)
+        return projectConfigurations, err
+    }
+
+    err = json.Unmarshal( []byte(data), &projectConfigurations )
+    return projectConfigurations, err
+}
+
+// UpdateProjectConfiguration updates the configuration of the project addressed by projectID
+// Updated for Cx1
+func (c *Cx1client) UpdateProjectConfiguration(projectID string, settings []ProjectConfigurationSetting) error {
+    if len(settings) == 0 {
+        return errors.New("Empty list of settings provided.")
+    }
+
+    params := url.Values{
+        "project-id":   {projectID},
+    }
+
+    jsonBody, err := json.Marshal( settings )
+    if err != nil {
+        return err
+    }
+
+    _, err = c.requestBytes( http.MethodPatch, fmt.Sprintf( "/configuration/project?%v", params.Encode() ), jsonBody )
+    if err != nil {
+        log.Errorf( "Failed to update project configuration: %s", err )
+        return err
+    }
+
+    return nil
+}
+
+
+func (c *Cx1client) SetProjectBranch( projectID, branch string, allowOverride bool ) error {
+    var setting ProjectConfigurationSetting
+    setting.Key = "scan.handler.git.branch"
+    setting.Value = branch
+    setting.AllowOverride = allowOverride
+
+    return c.UpdateProjectConfiguration( projectID, []ProjectConfigurationSetting{setting} )
+}
+
+func (c *Cx1client) SetProjectPreset( projectID, presetName string, allowOverride bool ) error {
+    var setting ProjectConfigurationSetting
+    setting.Key = "scan.config.sast.presetName"
+    setting.Value = presetName
+    setting.AllowOverride = allowOverride
+
+    return c.UpdateProjectConfiguration( projectID, []ProjectConfigurationSetting{setting} )
+}
+
+func (c *Cx1client) SetProjectLanguageMode( projectID, languageMode string, allowOverride bool ) error {
+    var setting ProjectConfigurationSetting
+    setting.Key = "scan.config.sast.languageMode"
+    setting.Value = languageMode
+    setting.AllowOverride = allowOverride
+
+    return c.UpdateProjectConfiguration( projectID, []ProjectConfigurationSetting{setting} )
+}
+
+func (c *Cx1client) SetProjectFileFilter( projectID, filter string, allowOverride bool ) error {
+    var setting ProjectConfigurationSetting
+    setting.Key = "scan.config.sast.filter"
+    setting.Value = filter
+    setting.AllowOverride = allowOverride
+
+    // TODO - apply the filter across all languages? set up separate calls per engine? engine as param?
+
+    return c.UpdateProjectConfiguration( projectID, []ProjectConfigurationSetting{setting} )
+}
+
 
 
 
@@ -567,6 +724,67 @@ func (c *Cx1client) GetQueries () ([]Query, error) {
 
 	return Queries, nil
 }
+
+
+// Reports
+func (c *Cx1client) RequestNewReport(scanID, projectID, branch, reportType string) (string, error) {
+    jsonData := map[string]interface{}{
+        "fileFormat": reportType,
+        "reportType": "ui",
+        "reportName": "scan-report",
+        "data": map[string]interface{}{
+            "scanId":     scanID,
+            "projectId":  projectID,
+            "branchName": branch,
+            "sections": []string{
+                "ScanSummary",
+                "ExecutiveSummary",
+                "ScanResults",
+            },
+            "scanners": []string{ "SAST" },
+            "host":"",
+        },
+    }
+
+    data, err := c.request( http.MethodPost, "/reports", jsonData )
+    if err != nil {
+        return "", errors.Wrapf(err, "Failed to trigger report generation for scan %v", scanID)
+    } else {
+        log.Infof( "Generating report %v", data )
+    }
+
+    var reportResponse struct {
+        ReportId string
+    }
+    err = json.Unmarshal( []byte(data), &reportResponse )
+
+    return reportResponse.ReportId, err
+}
+
+func (c *Cx1client) GetReportStatus(reportID string) (ReportStatus, error) {
+    var response ReportStatus
+
+    data, err := c.get( fmt.Sprintf("/reports/%v", reportID) )
+    if err != nil {
+        log.Errorf("Failed to fetch report status for reportID %v: %s", reportID, err)
+        return response, errors.Wrapf(err, "failed to fetch report status for reportID %v", reportID)
+    }
+
+    json.Unmarshal( [] byte(data), &response)
+    return response, nil
+}
+
+func (c *Cx1client) DownloadReport(reportUrl string) ([]byte, error) {
+
+    data, err := c.get( reportUrl )
+    if err != nil {
+        return []byte{}, errors.Wrapf(err, "failed to download report from url: %v", reportUrl)
+    }
+    return data, nil
+}
+
+
+
 
 // Scans
 // GetScans returns all scan status on the project addressed by projectID
@@ -584,12 +802,102 @@ func (c *Cx1client) GetScan(scanID string) (Scan, error) {
     return scan, nil
 }
 
+// GetScans returns all scan status on the project addressed by projectID
+func (c *Cx1client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
+    scans := []Scan{}
+    body := url.Values{
+        "projectId": {projectID},
+        "offset":     {fmt.Sprintf("%v",0)},
+        "limit":      {fmt.Sprintf("%v", limit)},
+        "sort":        {"+created_at"},
+    }
+
+    data, err := c.get( fmt.Sprintf("/scans?%v", body.Encode()) )
+    if err != nil {
+        log.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
+        return scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
+    }
+
+    json.Unmarshal(data, &scans)
+    return scans, nil
+}
+
+func (c *Cx1client) scanProject( scanConfig map[string]interface{} ) (Scan, error) {
+    scan := Scan{}
+    data, err := c.request( http.MethodPost, "/scans", scanConfig )
+    if err != nil {
+        return scan, err
+    }
+
+    err = json.Unmarshal(data, &scan)
+    return scan, err
+}
+
+func (c *Cx1client) ScanProjectZip(projectID, sourceUrl, branch string, settings []ScanConfiguration ) (Scan, error) {
+    jsonBody := map[string]interface{}{
+        "project" : map[string]interface{}{    "id" : projectID },
+        "type": "upload",
+        "handler" : map[string]interface{}{ 
+            "uploadurl" : sourceUrl,
+            "branch" : branch,
+        },
+        "config" : settings,
+    }
+
+    scan, err := c.scanProject( jsonBody )
+    if err != nil {
+        return scan, errors.Wrapf( err, "Failed to start a zip scan for project %v", projectID )
+    }
+    return scan, err
+}
+
+func (c *Cx1client) ScanProjectGit(projectID, repoUrl, branch string, settings []ScanConfiguration ) (Scan, error) {
+    jsonBody := map[string]interface{}{
+        "project" : map[string]interface{}{    "id" : projectID },
+        "type": "git",
+        "handler" : map[string]interface{}{ 
+            "repoUrl" : repoUrl,
+            "branch" : branch,
+        },
+        "config" : settings,
+    }
+
+    scan, err := c.scanProject( jsonBody )
+    if err != nil {
+        return scan, errors.Wrapf( err, "Failed to start a git scan for project %v", projectID )
+    }
+    return scan, err
+}
+
+// convenience function
+func (c *Cx1client) ScanProject(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration ) (Scan, error) {
+    if scanType == "upload" {
+        return c.ScanProjectZip( projectID, sourceUrl, branch, settings )
+    } else if scanType == "git" {
+        return c.ScanProjectGit( projectID, sourceUrl, branch, settings )
+    }
+
+    return Scan{}, errors.New( "Invalid scanType provided, must be 'upload' or 'git'" )
+}
+
+// convenience function
+func (s *Scan) IsIncremental() (bool, error) {
+    for _, scanconfig := range s.Metadata.Configs {
+        if scanconfig.ScanType == "sast" {
+            if val, ok := scanconfig.Values["incremental"]; ok {
+                return val=="true", nil
+            }
+        }
+    }
+    return false, errors.New( fmt.Sprintf("Scan %v did not have a sast-engine incremental flag set", s.ScanID) )
+}
+
 
 
 func (c Cx1client) GetUploadURL () (string,error) {
 	log.Debug( "Get Upload URL" )
 	data := make( map[string]interface{}, 0 )
-	response, err := c.post( "/api/uploads", data )
+	response, err := c.request( http.MethodPost, "/api/uploads", data )
 
     if err != nil {
         log.Error( "Unable to get URL: " + err.Error() )
@@ -601,7 +909,7 @@ func (c Cx1client) GetUploadURL () (string,error) {
 	err = json.Unmarshal( []byte( response ), &jsonBody )
 	if err != nil {
 		log.Error("Error: " + err.Error() )
-		log.Error( "Input was: " + response )
+		//log.Error( "Input was: " + response )
 		return "", err
 	} else {
 		return jsonBody["url"].(string), nil
@@ -629,62 +937,23 @@ func (c *Cx1client) GetUsers () ([]User, error) {
 
 
 func (c Cx1client) ToString() string {
-	return c.tenant + " on " + c.baseUrl
+	return c.tenant + " on " + c.baseUrl + " with token: " + c.authToken[:4] + "..." + c.authToken[len(c.authToken)-4:]
 }
 
-
-
-func (c Cx1client) StartZipScan( projectId string, uploadUrl string, tags map[string]string ) (RunningScan,error) {
-	log.Debug( "Starting a zip scan for project " + projectId + " with URL " + uploadUrl )
-	body := map[string]interface{}{
-		"project" : map[string]interface{}{	"id" : projectId },
-		"type": "upload",
-		"tags": tags,
-		"handler" : map[string]interface{}{ "uploadurl" : uploadUrl },
-		"config" : []map[string]interface{}{
-			map[string]interface{}{
-				"type" : "sast",
-				"value" : map[string]interface{}{
-					"incremental" : "false",
-					"presetName": "Checkmarx Default",
-				},
-			},
-		},
-	}
-
-	response, err := c.post( "/api/scans", body )
-	if err != nil {
-		log.Error( "Failed to start a scan")
-		return RunningScan{}, err
-	}
-
-	log.Debug( "Received response: " + response )
-	
-	var scan map[string]interface{}
-
-	err = json.Unmarshal( []byte( response ), &scan )
-	if err != nil {
-		log.Error("Error: " + err.Error() )
-		log.Error( "Input was: " + response )
-		return RunningScan{}, err
-	} else {
-		return parseRunningScanFromInterface( &scan )        
-	}
-}
 
 
 // internal data-parsing
 
-func parseGroups( input string ) ([]Group, error) {
-	log.Trace( "Parsing groups from: " + input )
+func parseGroups( input []byte ) ([]Group, error) {
+	//log.Trace( "Parsing groups from: " + input )
 	var groups []interface{}
 
 	var groupList []Group
 
-	err := json.Unmarshal( []byte( input ), &groups )
+	err := json.Unmarshal( input, &groups )
 	if err != nil {
 		log.Error("Error: " + err.Error() )
-		log.Error( "Input was: " + input )
+		//log.Error( "Input was: " + input )
 		return groupList, err
 	} else {
 		groupList = make([]Group, len(groups) )
@@ -700,8 +969,8 @@ func parseGroups( input string ) ([]Group, error) {
 
 
 
-func parsePresets( input string ) ([]Preset, error) {
-	log.Trace( "Parsing presets from: " + input )
+func parsePresets( input []byte ) ([]Preset, error) {
+	//log.Trace( "Parsing presets from: " + input )
 
 	var presets []Preset
     var presetResponse []map[string]interface{}
@@ -710,7 +979,7 @@ func parsePresets( input string ) ([]Preset, error) {
     err = json.Unmarshal( []byte( input ), &presetResponse )
     if err != nil {
 		log.Error("Error: " + err.Error() )
-		log.Error( "Input was: " + input )
+		//log.Error( "Input was: " + input )
 		return presets, err
 	}
 
@@ -730,8 +999,8 @@ func parsePresets( input string ) ([]Preset, error) {
 
 }
 
-func parseProjects( input string ) ([]Project, error) {
-	log.Trace( "Parsing projects from: " + input )
+func parseProjects( input []byte ) ([]Project, error) {
+	//log.Trace( "Parsing projects from: " + input )
 	var projectResponse struct {
         TotalCount int
         filteredTotalCount int
@@ -757,7 +1026,7 @@ func parseProjects( input string ) ([]Project, error) {
 	return projectList, nil
 }
 
-func parseRunningScans( input string ) ([]RunningScan,error) {
+func parseRunningScans( input []byte ) ([]RunningScan,error) {
 	var scans []RunningScan
 
 	//var scanList []interface{} TODO
@@ -766,7 +1035,7 @@ func parseRunningScans( input string ) ([]RunningScan,error) {
 }
 
 func parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan, error) {
-	log.Trace( "Parsing scan from interface" )
+	//log.Trace( "Parsing scan from interface" )
 	scan := RunningScan{}
 
 	scan.ScanID = (*input)["id"].(string)
@@ -794,8 +1063,8 @@ func parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan
 	return scan, err
 }
 
-func parseUsers( input string ) ([]User, error) {
-	log.Trace( "Parsing users from: " + input )
+func parseUsers( input []byte ) ([]User, error) {
+	//log.Trace( "Parsing users from: " + input )
 	var users []map[string]interface{}
 
 	var userList []User
@@ -803,7 +1072,7 @@ func parseUsers( input string ) ([]User, error) {
 	err := json.Unmarshal( []byte( input ), &users )
 	if err != nil {
 		log.Error("Error: " + err.Error() )
-		log.Error( "Input was: " + input )
+		//log.Error( "Input was: " + input )
 		return userList, err
 	} else {
 		userList = make([]User, 0 )
