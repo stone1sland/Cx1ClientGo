@@ -5,27 +5,32 @@ There are many gaps in the functionality so this is best used as an example for 
 Example usage:
 
 
+```golang
 package main
 
 import (
 	"github.com/cxpsemea/Cx1ClientGo"
-	"fmt"
+	log "github.com/sirupsen/logrus"
 	"os"
+    "net/http"
 )
 
 func main() {
-	fmt.Println( "Starting" )
+	logger := log.New()
+	logger.Info( "Starting" )
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
 	tenant := os.Args[3]
 	api_key := os.Args[4]
 
-	cx1client, err := Cx1ClientGo.NewAPIKeyClient( base_url, iam_url, tenant, api_key )
+	cx1client, err := Cx1ClientGo.NewAPIKeyClient( &http.Client{}, base_url, iam_url, tenant, api_key, logger )
 	if err != nil {
-		fmt.Println( "Error creating client: " + err.Error() )
+		log.Error( "Error creating client: " + err.Error() )
+		return 
 	}
 
 	// no err means that the client is initialized
-	fmt.Println( "Client initialized: " + cx1client.ToString() )
+	logger.Info( "Client initialized: " + cx1client.ToString() )
 }
+```

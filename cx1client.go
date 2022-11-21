@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"bytes"
     "github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"strconv"
 )
 
@@ -27,6 +27,7 @@ type Cx1client struct {
 	baseUrl string
 	iamUrl string
 	tenant string
+    logger  *logrus.Logger
 }
 
 type Group struct {
@@ -144,211 +145,27 @@ type WorkflowLog struct {
 
 
 // Main entry for users of this client:
-
-
-func NewOAuthClient( base_url string, iam_url string, tenant string, client_id string, client_secret string ) (*Cx1client, error) {
-    token, err := GetTokenOIDC( iam_url, tenant, client_id, client_secret )
+func NewOAuthClient( client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger ) (*Cx1client, error) {
+    token, err := getTokenOIDC( client, iam_url, tenant, client_id, client_secret, logger )
     if err != nil {
         return nil, err
     }
-	cli := Cx1client{ &http.Client{}, token, base_url, iam_url, tenant }
+	cli := Cx1client{ client, token, base_url, iam_url, tenant, logger }
 	return &cli, nil
 }
 
-func NewAPIKeyClient(base_url string, iam_url string, tenant string, api_key string ) (*Cx1client, error) {
-    token, err := GetTokenAPIKey( iam_url, tenant, api_key )
+func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger ) (*Cx1client, error) {
+    token, err := getTokenAPIKey( client, iam_url, tenant, api_key, logger )
     if err != nil {
         return nil, err
     }
 
-	cli := Cx1client{ &http.Client{}, token, base_url, iam_url, tenant }
+	cli := Cx1client{ client, token, base_url, iam_url, tenant, logger }
 	return &cli, nil
 }
 
-// Create a client from a pre-generated token
-func New( token string, base_url string, iam_url string, tenant string ) *Cx1client {
-	cli := Cx1client{ &http.Client{}, token, base_url, iam_url, tenant }
-	return &cli
-}
 
-
-// internal calls
-
-func (c Cx1client) get( api string ) ([]byte,error) {
-
-	cx1_req, err := http.NewRequest(http.MethodGet, c.baseUrl + api, nil)
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	
-	res, err := c.httpClient.Do( cx1_req );
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}	
-	defer res.Body.Close()
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-
-func (c Cx1client) requestBytes( method string, api string, data []byte ) ([]byte,error) {
-    cx1_req, err := http.NewRequest(method, c.baseUrl + api, bytes.NewReader( data ) )
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-	cx1_req.Header.Add( "Content-Type", "application/json" )
-
-	log.Trace( "Sending " + method + " request to " + api )
-	
-	res, err := c.httpClient.Do( cx1_req );
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}	
-	defer res.Body.Close()
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-
-func (c Cx1client) request( method string, api string, data map[string]interface{} ) ([]byte,error) {
-	jsonBody, err := json.Marshal(data)
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-    return c.requestBytes( method, api, jsonBody )	
-}
-
-func (c Cx1client) getIAM( api_base string, api string ) ([]byte, error) {
-	rurl := c.iamUrl + api_base + c.tenant + api
-	log.Trace( "Get from IAM " + rurl )
-	cx1_req, err := http.NewRequest(http.MethodGet,rurl, nil)
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	
-	res, err := c.httpClient.Do( cx1_req );
-	defer res.Body.Close()
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-func (c Cx1client) postIAM( api_base string, api string, data map[string]interface{} ) ([]byte,error) {
-	rurl := c.iamUrl + api_base + c.tenant + api
-
-	jsonBody, err := json.Marshal(data)
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-	log.Trace( "Posting to IAM " + rurl + ": " + string(jsonBody) )
-
-	cx1_req, err := http.NewRequest(http.MethodPost, rurl, strings.NewReader(string(jsonBody)) )
-	cx1_req.Header.Add( "Content-Type", "application/json" )
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	res, err := c.httpClient.Do( cx1_req );
-	defer res.Body.Close()
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-
-// special call for zip-upload 
-func (c Cx1client) PutFile( URL string, filename string ) ([]byte,error) {
-	log.Trace( "Putting file " + filename + " to " + URL )
-
-	fileContents, err := ioutil.ReadFile(filename)
-    if err != nil {
-    	log.Error("Failed to Read the File "+ filename + ": " + err.Error())
-		return []byte{}, err
-    }
-
-	cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader( fileContents ) )
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	cx1_req.Header.Add( "Content-Type", "application/zip" )
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-	cx1_req.ContentLength = int64(len(fileContents))
-
-	log.Trace( "File contents: " + string(fileContents) )
-
-	res, err := c.httpClient.Do( cx1_req );
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-	defer res.Body.Close()
-
-	
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		log.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-
-// Authentication and init
-
-
-func GetTokenOIDC( iam_url string, tenant string, client_id string, client_secret string ) (string, error) {
+func getTokenOIDC( client *http.Client, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger ) (string, error) {
 	login_url := iam_url + "/auth/realms/" + tenant + "/protocol/openid-connect/token"
 	
 	data := url.Values{}
@@ -357,33 +174,32 @@ func GetTokenOIDC( iam_url string, tenant string, client_id string, client_secre
 	data.Set( "client_secret", client_secret )
 
 	
-	log.Info( "Authenticating with Cx1 at: "+login_url )
+	logger.Info( "Authenticating with Cx1 at: "+login_url )
 
 	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
 	cx1_req.Header.Add( "Content-Type", "application/x-www-form-urlencoded" )
 	if err != nil {
-		log.Error( "Error: " + err.Error() )
+		logger.Error( "Error: " + err.Error() )
 		return "", err
 	}
-	
-	cli := &http.Client{}
-	res, err := cli.Do( cx1_req );
+
+	res, err := client.Do( cx1_req );
 	defer res.Body.Close()
 
 	if err != nil {
-		log.Error( "Error: " + err.Error() )
+		logger.Error( "Error: " + err.Error() )
 		return "", err
 	}
 
 	resBody,err := ioutil.ReadAll( res.Body )
 
 	if err != nil {
-		log.Error( "Error: " + err.Error() )
+		logger.Error( "Error: " + err.Error() )
 		return "", err
 	}
 
 
-	//log.Trace( "  received response: " + string(resBody) )
+	//logger.Trace( "  received response: " + string(resBody) )
 	var jsonBody map[string]interface{}
 
 	err = json.Unmarshal(resBody, &jsonBody)
@@ -391,13 +207,13 @@ func GetTokenOIDC( iam_url string, tenant string, client_id string, client_secre
 	if ( err == nil ) {
 		return jsonBody["access_token"].(string), nil
 	} else {
-		log.Error( "Error parsing response: " + err.Error() )
-		log.Error( "Input was: " + string(resBody) )
+		logger.Error( "Error parsing response: " + err.Error() )
+		logger.Error( "Input was: " + string(resBody) )
 		return "", err
 	}
 }
 
-func GetTokenAPIKey( iam_url string, tenant string, api_key string ) (string, error) {
+func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key string, logger *logrus.Logger ) (string, error) {
 	login_url := iam_url + "/auth/realms/" + tenant + "/protocol/openid-connect/token"
 	
 	data := url.Values{}
@@ -406,32 +222,31 @@ func GetTokenAPIKey( iam_url string, tenant string, api_key string ) (string, er
 	data.Set( "refresh_token", api_key )
 
 	
-	log.Info( "Authenticating with Cx1 at: "+login_url )
+	logger.Info( "Authenticating with Cx1 at: "+login_url )
 
 	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
 	cx1_req.Header.Add( "Content-Type", "application/x-www-form-urlencoded" )
 	if err != nil {
-		log.Error( "Error: " + err.Error() )
+		logger.Error( "Error: " + err.Error() )
 		return "", err
 	}
 	
-	cli := &http.Client{}
-	res, err := cli.Do( cx1_req );
+	res, err := client.Do( cx1_req );
 	defer res.Body.Close()
 
 	if err != nil {
-		log.Error( "Error: " + err.Error() )
+		logger.Error( "Error: " + err.Error() )
 		return "", err
 	}
 
 	resBody,err := ioutil.ReadAll( res.Body )
 
 	if err != nil {
-		log.Error( "Error: " + err.Error() )
+		logger.Error( "Error: " + err.Error() )
 		return "", err
 	}
 
-	log.Trace( "  received response: " + string(resBody) )
+	logger.Trace( "  received response: " + string(resBody) )
 	var jsonBody map[string]interface{}
 
 	err = json.Unmarshal(resBody, &jsonBody)
@@ -439,24 +254,199 @@ func GetTokenAPIKey( iam_url string, tenant string, api_key string ) (string, er
 	if ( err == nil ) {
 		return jsonBody["access_token"].(string), nil
 	} else {
-		log.Error( "Error parsing response: " + err.Error() )
-		log.Error( "Input was: " + string(resBody) )
+		logger.Error( "Error parsing response: " + err.Error() )
+		logger.Error( "Input was: " + string(resBody) )
 		return "", err
 	}
 }
 
 
 
+// internal calls
+
+func (c *Cx1client) get( api string ) ([]byte,error) {
+
+	cx1_req, err := http.NewRequest(http.MethodGet, c.baseUrl + api, nil)
+	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	
+	res, err := c.httpClient.Do( cx1_req );
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}	
+	defer res.Body.Close()
+
+	resBody,err := ioutil.ReadAll( res.Body )
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	return resBody, nil
+}
+
+func (c *Cx1client) requestBytes( method string, api string, data []byte ) ([]byte,error) {
+    cx1_req, err := http.NewRequest(method, c.baseUrl + api, bytes.NewReader( data ) )
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+	cx1_req.Header.Add( "Content-Type", "application/json" )
+
+	c.logger.Trace( "Sending " + method + " request to " + api )
+	
+	res, err := c.httpClient.Do( cx1_req );
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}	
+	defer res.Body.Close()
+
+	resBody,err := ioutil.ReadAll( res.Body )
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	return resBody, nil
+}
+
+func (c *Cx1client) request( method string, api string, data map[string]interface{} ) ([]byte,error) {
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+    return c.requestBytes( method, api, jsonBody )	
+}
+
+func (c *Cx1client) getIAM( api_base string, api string ) ([]byte, error) {
+	rurl := c.iamUrl + api_base + c.tenant + api
+	c.logger.Trace( "Get from IAM " + rurl )
+	cx1_req, err := http.NewRequest(http.MethodGet,rurl, nil)
+	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	
+	res, err := c.httpClient.Do( cx1_req );
+	defer res.Body.Close()
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	resBody,err := ioutil.ReadAll( res.Body )
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	return resBody, nil
+}
+func (c *Cx1client) postIAM( api_base string, api string, data map[string]interface{} ) ([]byte,error) {
+	rurl := c.iamUrl + api_base + c.tenant + api
+
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+	c.logger.Trace( "Posting to IAM " + rurl + ": " + string(jsonBody) )
+
+	cx1_req, err := http.NewRequest(http.MethodPost, rurl, strings.NewReader(string(jsonBody)) )
+	cx1_req.Header.Add( "Content-Type", "application/json" )
+	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	res, err := c.httpClient.Do( cx1_req );
+	defer res.Body.Close()
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	resBody,err := ioutil.ReadAll( res.Body )
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	return resBody, nil
+}
+
+// special call for zip-upload 
+func (c *Cx1client) PutFile( URL string, filename string ) ([]byte,error) {
+	c.logger.Trace( "Putting file " + filename + " to " + URL )
+
+	fileContents, err := ioutil.ReadFile(filename)
+    if err != nil {
+    	c.logger.Error("Failed to Read the File "+ filename + ": " + err.Error())
+		return []byte{}, err
+    }
+
+	cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader( fileContents ) )
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	cx1_req.Header.Add( "Content-Type", "application/zip" )
+	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+	cx1_req.ContentLength = int64(len(fileContents))
+
+	c.logger.Trace( "File contents: " + string(fileContents) )
+
+	res, err := c.httpClient.Do( cx1_req );
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+	defer res.Body.Close()
+
+	
+	resBody,err := ioutil.ReadAll( res.Body )
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return []byte{}, err
+	}
+
+	return resBody, nil
+}
+
+
+
 // Groups
-func (c Cx1client) CreateGroup ( groupname string ) (Group, error) {
-	log.Debug( "Create Group: name " + groupname  )
+func (c *Cx1client) CreateGroup ( groupname string ) (Group, error) {
+	c.logger.Debug( "Create Group: name " + groupname  )
 	data := map[string]interface{} {
 		"name" : groupname,
 	}
 
 	_, err := c.postIAM( "/auth/admin/realms/", "/groups", data )
     if err != nil {
-        log.Error( "Error creating group: " + err.Error() )
+        c.logger.Error( "Error creating group: " + err.Error() )
         return Group{}, nil
     }
 
@@ -464,7 +454,7 @@ func (c Cx1client) CreateGroup ( groupname string ) (Group, error) {
 }
 
 func (c *Cx1client) GetGroups () ([]Group, error) {
-	log.Debug( "Get Groups" )
+	c.logger.Debug( "Get Groups" )
     var Groups []Group
 	
     response, err := c.getIAM( "/auth/admin/realms/", "/groups?briefRepresentation=true" )
@@ -472,25 +462,25 @@ func (c *Cx1client) GetGroups () ([]Group, error) {
         return Groups, err
     }
 
-    Groups, err = parseGroups( response )
-    log.Trace( "Got " + strconv.Itoa( len(Groups) ) + " groups" )
+    Groups, err = c.parseGroups( response )
+    c.logger.Trace( "Got " + strconv.Itoa( len(Groups) ) + " groups" )
     return Groups, err
 }
 
-func (c Cx1client) GetGroupByName (groupname string) (Group, error) {
-	log.Debug( "Get Group by name: " + groupname )
+func (c *Cx1client) GetGroupByName (groupname string) (Group, error) {
+	c.logger.Debug( "Get Group by name: " + groupname )
     response, err := c.getIAM( "/auth/admin/realms/", "/groups?briefRepresentation=true&search=" + url.QueryEscape(groupname) )
     if err != nil {
         return Group{}, err
     }
-	groups, err := parseGroups( response )
+	groups, err := c.parseGroups( response )
 	
     if err != nil {
-        log.Error( "Error retrieving group: " + err.Error() )
+        c.logger.Error( "Error retrieving group: " + err.Error() )
         return Group{}, err
     }
 
-	log.Trace( "Got " + strconv.Itoa( len(groups) ) + " groups" )
+	c.logger.Trace( "Got " + strconv.Itoa( len(groups) ) + " groups" )
 
 	for i := range groups {
 		if groups[i].Name == groupname {
@@ -505,15 +495,15 @@ func (c Cx1client) GetGroupByName (groupname string) (Group, error) {
 
 
 func (c *Cx1client) GetPresets () ([]Preset, error) {
-	log.Debug( "Get Presets" )
+	c.logger.Debug( "Get Presets" )
     var Presets []Preset
     response, err := c.get( "/api/queries/presets" )
     if err != nil {
         return Presets, err
     }
 
-    Presets, err = parsePresets( response )
-    log.Trace( "Got " + strconv.Itoa( len(Presets) ) + " presets" )
+    Presets, err = c.parsePresets( response )
+    c.logger.Trace( "Got " + strconv.Itoa( len(Presets) ) + " presets" )
     return Presets, err
 }
 
@@ -522,8 +512,8 @@ func (c *Cx1client) GetPresets () ([]Preset, error) {
 
 
 // Projects
-func (c Cx1client) CreateProject ( projectname string, cx1_group_id string, tags map[string]string ) (Project,error) {
-	log.Debug ( "Create Project: name " + projectname + ", group id " + cx1_group_id )
+func (c *Cx1client) CreateProject ( projectname string, cx1_group_id string, tags map[string]string ) (Project,error) {
+	c.logger.Debug ( "Create Project: name " + projectname + ", group id " + cx1_group_id )
 	data := map[string]interface{} {
 		"name" : projectname,
 		"groups" : []string{ cx1_group_id },
@@ -535,7 +525,7 @@ func (c Cx1client) CreateProject ( projectname string, cx1_group_id string, tags
     var project Project
 	response, err := c.request( http.MethodPost, "/api/projects", data )
 	if err != nil {
-        log.Error( "Error while creating project: " + err.Error() )
+        c.logger.Error( "Error while creating project: " + err.Error() )
         return project, err
 	}
     
@@ -545,7 +535,7 @@ func (c Cx1client) CreateProject ( projectname string, cx1_group_id string, tags
 }
 
 func (c *Cx1client) GetProjects () ([]Project, error) {
-	log.Debug( "Get Projects" )
+	c.logger.Debug( "Get Projects" )
     var Projects []Project
 	
     response, err := c.get( "/api/projects/" )
@@ -553,13 +543,13 @@ func (c *Cx1client) GetProjects () ([]Project, error) {
         return Projects, err
     }
 
-    Projects, err = parseProjects( response )
-    log.Trace( "Retrieved " + strconv.Itoa( len(Projects) ) + " projects")
+    Projects, err = c.parseProjects( response )
+    c.logger.Trace( "Retrieved " + strconv.Itoa( len(Projects) ) + " projects")
     return Projects, err
 	
 }
 func (c *Cx1client) GetProjectByID(projectID string) (Project, error) {
-    log.Debugf("Getting Project with ID %v...", projectID)
+    c.logger.Debugf("Getting Project with ID %v...", projectID)
     var project Project
 
     data, err := c.get( fmt.Sprintf("/projects/%v", projectID) )
@@ -570,20 +560,20 @@ func (c *Cx1client) GetProjectByID(projectID string) (Project, error) {
     err = json.Unmarshal( []byte(data) , &project)
     return project, err
 }
-func (c Cx1client) GetProjectByName ( projectname string ) (Project,error) {
-	log.Debug( "Get Project By Name: " + projectname )
+func (c *Cx1client) GetProjectByName ( projectname string ) (Project,error) {
+	c.logger.Debug( "Get Project By Name: " + projectname )
     response, err := c.get( "/api/projects?name=" + url.QueryEscape(projectname) )
     if err != nil {
         return Project{}, err
     }
 
-	projects, err := parseProjects( response )
+	projects, err := c.parseProjects( response )
     if err != nil {
-        log.Error( "Error getting project: " + err.Error() )
+        c.logger.Error( "Error getting project: " + err.Error() )
         return Project{}, err
     }
 
-	log.Trace( "Got " + strconv.Itoa( len(projects) ) + " projects" )
+	c.logger.Trace( "Got " + strconv.Itoa( len(projects) ) + " projects" )
 
 	for i := range projects {
 		if projects[i].Name == projectname {
@@ -595,7 +585,7 @@ func (c Cx1client) GetProjectByName ( projectname string ) (Project,error) {
 	return Project{}, errors.New( "No such project found" )
 }
 func (c *Cx1client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Project, error) {
-    log.Debugf("Getting projects with name %v of group %v...", projectName, groupID)
+    c.logger.Debugf("Getting projects with name %v of group %v...", projectName, groupID)
     
     var projectResponse struct {
         TotalCount      int     `json:"totalCount"`
@@ -632,7 +622,7 @@ func (c *Cx1client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
 
 // New for Cx1
 func (c *Cx1client) GetProjectConfiguration(projectID string) ([]ProjectConfigurationSetting, error) {
-    log.Debug("Getting project configuration")
+    c.logger.Debug("Getting project configuration")
     var projectConfigurations []ProjectConfigurationSetting
     params := url.Values{
         "project-id":   {projectID},
@@ -640,7 +630,7 @@ func (c *Cx1client) GetProjectConfiguration(projectID string) ([]ProjectConfigur
     data, err := c.get( fmt.Sprintf( "/configuration/project?%v", params.Encode() ) )
 
     if err != nil {
-        log.Errorf("Failed to get project configuration for project ID %v: %s", projectID, err)
+        c.logger.Errorf("Failed to get project configuration for project ID %v: %s", projectID, err)
         return projectConfigurations, err
     }
 
@@ -666,7 +656,7 @@ func (c *Cx1client) UpdateProjectConfiguration(projectID string, settings []Proj
 
     _, err = c.requestBytes( http.MethodPatch, fmt.Sprintf( "/configuration/project?%v", params.Encode() ), jsonBody )
     if err != nil {
-        log.Errorf( "Failed to update project configuration: %s", err )
+        c.logger.Errorf( "Failed to update project configuration: %s", err )
         return err
     }
 
@@ -716,7 +706,7 @@ func (c *Cx1client) SetProjectFileFilter( projectID, filter string, allowOverrid
 
 
 func (c *Cx1client) GetQueries () ([]Query, error) {
-	log.Debug( "Get Queries" )
+	c.logger.Debug( "Get Queries" )
     var Queries []Query
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
@@ -750,7 +740,7 @@ func (c *Cx1client) RequestNewReport(scanID, projectID, branch, reportType strin
     if err != nil {
         return "", errors.Wrapf(err, "Failed to trigger report generation for scan %v", scanID)
     } else {
-        log.Infof( "Generating report %v", data )
+        c.logger.Infof( "Generating report %v", data )
     }
 
     var reportResponse struct {
@@ -766,7 +756,7 @@ func (c *Cx1client) GetReportStatus(reportID string) (ReportStatus, error) {
 
     data, err := c.get( fmt.Sprintf("/reports/%v", reportID) )
     if err != nil {
-        log.Errorf("Failed to fetch report status for reportID %v: %s", reportID, err)
+        c.logger.Errorf("Failed to fetch report status for reportID %v: %s", reportID, err)
         return response, errors.Wrapf(err, "failed to fetch report status for reportID %v", reportID)
     }
 
@@ -794,7 +784,7 @@ func (c *Cx1client) GetScan(scanID string) (Scan, error) {
 
     data, err := c.get( fmt.Sprintf("/scans/%v", scanID) )
     if err != nil {
-        log.Errorf("Failed to fetch scan with ID %v: %s", scanID, err)
+        c.logger.Errorf("Failed to fetch scan with ID %v: %s", scanID, err)
         return scan, errors.Wrapf(err, "failed to fetch scan with ID %v", scanID)
     }
 
@@ -814,7 +804,7 @@ func (c *Cx1client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
 
     data, err := c.get( fmt.Sprintf("/scans?%v", body.Encode()) )
     if err != nil {
-        log.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
+        c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
         return scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
     }
 
@@ -894,13 +884,13 @@ func (s *Scan) IsIncremental() (bool, error) {
 
 
 
-func (c Cx1client) GetUploadURL () (string,error) {
-	log.Debug( "Get Upload URL" )
+func (c *Cx1client) GetUploadURL () (string,error) {
+	c.logger.Debug( "Get Upload URL" )
 	data := make( map[string]interface{}, 0 )
 	response, err := c.request( http.MethodPost, "/api/uploads", data )
 
     if err != nil {
-        log.Error( "Unable to get URL: " + err.Error() )
+        c.logger.Error( "Unable to get URL: " + err.Error() )
         return "", err
     } 
 
@@ -908,8 +898,8 @@ func (c Cx1client) GetUploadURL () (string,error) {
 
 	err = json.Unmarshal( []byte( response ), &jsonBody )
 	if err != nil {
-		log.Error("Error: " + err.Error() )
-		//log.Error( "Input was: " + response )
+		c.logger.Error("Error: " + err.Error() )
+		//c.logger.Error( "Input was: " + response )
 		return "", err
 	} else {
 		return jsonBody["url"].(string), nil
@@ -920,7 +910,7 @@ func (c Cx1client) GetUploadURL () (string,error) {
 
 
 func (c *Cx1client) GetUsers () ([]User, error) {
-	log.Debug( "Get Users" )
+	c.logger.Debug( "Get Users" )
 
     var Users []User
     // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
@@ -929,14 +919,14 @@ func (c *Cx1client) GetUsers () ([]User, error) {
         return Users, err
     }
 
-    Users, err = parseUsers( response )
-    log.Trace( "Got " + strconv.Itoa( len(Users) ) + " users" )
+    Users, err = c.parseUsers( response )
+    c.logger.Trace( "Got " + strconv.Itoa( len(Users) ) + " users" )
     return Users, err 
 }
 
 
 
-func (c Cx1client) ToString() string {
+func (c *Cx1client) ToString() string {
 	return c.tenant + " on " + c.baseUrl + " with token: " + c.authToken[:4] + "..." + c.authToken[len(c.authToken)-4:]
 }
 
@@ -944,16 +934,16 @@ func (c Cx1client) ToString() string {
 
 // internal data-parsing
 
-func parseGroups( input []byte ) ([]Group, error) {
-	//log.Trace( "Parsing groups from: " + input )
+func (c *Cx1client) parseGroups( input []byte ) ([]Group, error) {
+	//c.logger.Trace( "Parsing groups from: " + input )
 	var groups []interface{}
 
 	var groupList []Group
 
 	err := json.Unmarshal( input, &groups )
 	if err != nil {
-		log.Error("Error: " + err.Error() )
-		//log.Error( "Input was: " + input )
+		c.logger.Error("Error: " + err.Error() )
+		//c.logger.Error( "Input was: " + input )
 		return groupList, err
 	} else {
 		groupList = make([]Group, len(groups) )
@@ -969,8 +959,8 @@ func parseGroups( input []byte ) ([]Group, error) {
 
 
 
-func parsePresets( input []byte ) ([]Preset, error) {
-	//log.Trace( "Parsing presets from: " + input )
+func (c *Cx1client) parsePresets( input []byte ) ([]Preset, error) {
+	//c.logger.Trace( "Parsing presets from: " + input )
 
 	var presets []Preset
     var presetResponse []map[string]interface{}
@@ -978,29 +968,29 @@ func parsePresets( input []byte ) ([]Preset, error) {
 
     err = json.Unmarshal( []byte( input ), &presetResponse )
     if err != nil {
-		log.Error("Error: " + err.Error() )
-		//log.Error( "Input was: " + input )
+		c.logger.Error("Error: " + err.Error() )
+		//c.logger.Error( "Input was: " + input )
 		return presets, err
 	}
 
     presets = make( []Preset, len(presetResponse) )
 
     for id, p := range presetResponse {
-        //log.Debug( " - " + strconv.Itoa( int(p["id"].(float64)) ) + ": " + p["name"].(string) )
+        //c.logger.Debug( " - " + strconv.Itoa( int(p["id"].(float64)) ) + ": " + p["name"].(string) )
         presets[id].PresetID = int(p["id"].(float64))
         presets[id].Name = p["name"].(string)
     }
 
 
 
-    //log.Trace( "Preset1: " + presets[0].PresetID + ", " + preset[0].Name )
+    //c.logger.Trace( "Preset1: " + presets[0].PresetID + ", " + preset[0].Name )
 
 	return presets, nil
 
 }
 
-func parseProjects( input []byte ) ([]Project, error) {
-	//log.Trace( "Parsing projects from: " + input )
+func (c *Cx1client) parseProjects( input []byte ) ([]Project, error) {
+	//c.logger.Trace( "Parsing projects from: " + input )
 	var projectResponse struct {
         TotalCount int
         filteredTotalCount int
@@ -1010,7 +1000,7 @@ func parseProjects( input []byte ) ([]Project, error) {
 
 	err := json.Unmarshal( []byte( input ), &projectResponse )
 	if err != nil {
-		log.Error("Error: " + err.Error() )
+		c.logger.Error("Error: " + err.Error() )
 		return projectList, err
 	}
 
@@ -1026,7 +1016,7 @@ func parseProjects( input []byte ) ([]Project, error) {
 	return projectList, nil
 }
 
-func parseRunningScans( input []byte ) ([]RunningScan,error) {
+func (c *Cx1client) parseRunningScans( input []byte ) ([]RunningScan,error) {
 	var scans []RunningScan
 
 	//var scanList []interface{} TODO
@@ -1034,8 +1024,8 @@ func parseRunningScans( input []byte ) ([]RunningScan,error) {
 	return scans, nil
 }
 
-func parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan, error) {
-	//log.Trace( "Parsing scan from interface" )
+func (c *Cx1client) parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan, error) {
+	//c.logger.Trace( "Parsing scan from interface" )
 	scan := RunningScan{}
 
 	scan.ScanID = (*input)["id"].(string)
@@ -1048,7 +1038,7 @@ func parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan
 	scan.CreatedAt, err = time.Parse(time.RFC3339, (*input)["createdAt"].(string) )
 
 	if err != nil {
-		log.Warn( "Failed to parse time from " + (*input)["createdAt"].(string) )
+		c.logger.Warn( "Failed to parse time from " + (*input)["createdAt"].(string) )
 	}
 
 
@@ -1056,31 +1046,31 @@ func parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan
 	scan.UpdatedAt, err2 = time.Parse(time.RFC3339, (*input)["updatedAt"].(string) )
 
 	if err2 != nil {
-		log.Warn( "Failed to parse time from " + (*input)["updatedAt"].(string) )
+		c.logger.Warn( "Failed to parse time from " + (*input)["updatedAt"].(string) )
         err = errors.Wrap( err, err2.Error() )
 	}
 
 	return scan, err
 }
 
-func parseUsers( input []byte ) ([]User, error) {
-	//log.Trace( "Parsing users from: " + input )
+func (c *Cx1client) parseUsers( input []byte ) ([]User, error) {
+	//c.logger.Trace( "Parsing users from: " + input )
 	var users []map[string]interface{}
 
 	var userList []User
 
 	err := json.Unmarshal( []byte( input ), &users )
 	if err != nil {
-		log.Error("Error: " + err.Error() )
-		//log.Error( "Input was: " + input )
+		c.logger.Error("Error: " + err.Error() )
+		//c.logger.Error( "Input was: " + input )
 		return userList, err
 	} else {
 		userList = make([]User, 0 )
 		
 		for _, u := range users {
-			user, err := parseUserFromInterface( &u )			
+			user, err := c.parseUserFromInterface( &u )			
 			if err != nil {
-                log.Error("Failed to parse user: " + err.Error() )
+                c.logger.Error("Failed to parse user: " + err.Error() )
 
             } else {
 				userList = append( userList, user )
@@ -1091,8 +1081,8 @@ func parseUsers( input []byte ) ([]User, error) {
 	return userList, nil
 }
 
-func parseUserFromInterface( input *map[string]interface{} ) (User, error) {
-	log.Trace( "Parsing user from interface" )
+func (c *Cx1client) parseUserFromInterface( input *map[string]interface{} ) (User, error) {
+	c.logger.Trace( "Parsing user from interface" )
     var user User
 
 	if (*input)["id"] == nil {
