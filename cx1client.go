@@ -22,7 +22,7 @@ func init() {
 	
 }
 
-type Cx1client struct {
+type Cx1Client struct {
 	httpClient *http.Client
 	authToken string
 	baseUrl string
@@ -37,10 +37,6 @@ type Group struct {
 //	Path string // ignoring for now
 //  SubGroups string // ignoring for now
 }
-
-
-
-
 
 
 type Preset struct {
@@ -146,22 +142,22 @@ type WorkflowLog struct {
 
 
 // Main entry for users of this client:
-func NewOAuthClient( client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger ) (*Cx1client, error) {
+func NewOAuthClient( client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger ) (*Cx1Client, error) {
     token, err := getTokenOIDC( client, iam_url, tenant, client_id, client_secret, logger )
     if err != nil {
         return nil, err
     }
-	cli := Cx1client{ client, token, base_url, iam_url, tenant, logger }
+	cli := Cx1Client{ client, token, base_url, iam_url, tenant, logger }
 	return &cli, nil
 }
 
-func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger ) (*Cx1client, error) {
+func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger ) (*Cx1Client, error) {
     token, err := getTokenAPIKey( client, iam_url, tenant, api_key, logger )
     if err != nil {
         return nil, err
     }
 
-	cli := Cx1client{ client, token, base_url, iam_url, tenant, logger }
+	cli := Cx1Client{ client, token, base_url, iam_url, tenant, logger }
 	return &cli, nil
 }
 
@@ -261,7 +257,11 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	}
 }
 
-func (c *Cx1client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
+func (c *Cx1Client) GetToken() string {
+    return c.authToken
+}
+
+func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
 	request, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return &http.Request{}, err
@@ -284,7 +284,7 @@ func (c *Cx1client) createRequest(method, url string, body io.Reader, header *ht
 	return request, nil
 }
 
-func (c *Cx1client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
+func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
     var bodyBytes []byte
 
     if body != nil {
@@ -321,17 +321,17 @@ func (c *Cx1client) sendRequestInternal(method, url string, body io.Reader, head
 }
 
 // internal calls
-func (c *Cx1client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
+func (c *Cx1Client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
     cx1url := fmt.Sprintf("%v/api%v", c.baseUrl, url)
     return c.sendRequestInternal(method, cx1url, body, header )
 }
 
-func (c *Cx1client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
+func (c *Cx1Client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
     iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
     return c.sendRequestInternal(method, iamurl, body, header)
 }
 
-func (c *Cx1client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte ) {
+func (c *Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte ) {
     if len(requestBody) != 0 {
         c.logger.Errorf("Request body: %s", string(requestBody) )
     }
@@ -340,9 +340,48 @@ func (c *Cx1client) recordRequestDetailsInErrorCase(requestBody []byte, response
     }
 }
 
+func (c Cx1Client) PutFile( URL string, filename string ) (string,error) {
+	c.logger.Trace( "Putting file " + filename + " to " + URL )
+
+	fileContents, err := ioutil.ReadFile(filename)
+    if err != nil {
+    	c.logger.Error("Failed to Read the File "+ filename + ": " + err.Error())
+		return "", err
+    }
+
+	cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader( fileContents ) )
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return "", err
+	}
+
+	cx1_req.Header.Add( "Content-Type", "application/zip" )
+	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+	cx1_req.ContentLength = int64(len(fileContents))
+
+	c.logger.Trace( "File contents: " + string(fileContents) )
+
+	res, err := c.httpClient.Do( cx1_req );
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return "", err
+	}
+	defer res.Body.Close()
+
+	
+	resBody,err := ioutil.ReadAll( res.Body )
+
+	if err != nil {
+		c.logger.Error( "Error: " + err.Error() )
+		return "", err
+	}
+
+	return string(resBody), nil
+}
+
 
 // Groups
-func (c *Cx1client) CreateGroup ( groupname string ) (Group, error) {
+func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 	c.logger.Debug( "Create Group: name " + groupname  )
 	data := map[string]interface{} {
 		"name" : groupname,
@@ -361,7 +400,7 @@ func (c *Cx1client) CreateGroup ( groupname string ) (Group, error) {
 	return c.GetGroupByName( groupname )
 }
 
-func (c *Cx1client) GetGroups () ([]Group, error) {
+func (c *Cx1Client) GetGroups () ([]Group, error) {
 	c.logger.Debug( "Get Groups" )
     var Groups []Group
 	
@@ -375,7 +414,7 @@ func (c *Cx1client) GetGroups () ([]Group, error) {
     return Groups, err
 }
 
-func (c *Cx1client) GetGroupByName (groupname string) (Group, error) {
+func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
 	c.logger.Debug( "Get Group by name: " + groupname )
     response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin/realms/", "/groups?briefRepresentation=true&search=" + url.QueryEscape(groupname), nil, nil )
     if err != nil {
@@ -402,7 +441,7 @@ func (c *Cx1client) GetGroupByName (groupname string) (Group, error) {
 
 
 
-func (c *Cx1client) GetPresets () ([]Preset, error) {
+func (c *Cx1Client) GetPresets () ([]Preset, error) {
 	c.logger.Debug( "Get Presets" )
     var Presets []Preset
     response, err := c.sendRequest( http.MethodGet, "/api/queries/presets", nil, nil )
@@ -420,7 +459,7 @@ func (c *Cx1client) GetPresets () ([]Preset, error) {
 
 
 // Projects
-func (c *Cx1client) CreateProject ( projectname string, cx1_group_id string, tags map[string]string ) (Project,error) {
+func (c *Cx1Client) CreateProject ( projectname string, cx1_group_id string, tags map[string]string ) (Project,error) {
 	c.logger.Debug ( "Create Project: name " + projectname + ", group id " + cx1_group_id )
 	data := map[string]interface{} {
 		"name" : projectname,
@@ -446,7 +485,7 @@ func (c *Cx1client) CreateProject ( projectname string, cx1_group_id string, tag
 	return project, err
 }
 
-func (c *Cx1client) GetProjects () ([]Project, error) {
+func (c *Cx1Client) GetProjects () ([]Project, error) {
 	c.logger.Debug( "Get Projects" )
     var Projects []Project
 	
@@ -460,7 +499,7 @@ func (c *Cx1client) GetProjects () ([]Project, error) {
     return Projects, err
 	
 }
-func (c *Cx1client) GetProjectByID(projectID string) (Project, error) {
+func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
     c.logger.Debugf("Getting Project with ID %v...", projectID)
     var project Project
 
@@ -472,7 +511,7 @@ func (c *Cx1client) GetProjectByID(projectID string) (Project, error) {
     err = json.Unmarshal( []byte(data) , &project)
     return project, err
 }
-func (c *Cx1client) GetProjectByName ( projectname string ) (Project,error) {
+func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
 	c.logger.Debug( "Get Project By Name: " + projectname )
     response, err := c.sendRequest( http.MethodGet, "/api/projects?name=" + url.QueryEscape(projectname), nil, nil )
     if err != nil {
@@ -496,7 +535,7 @@ func (c *Cx1client) GetProjectByName ( projectname string ) (Project,error) {
 
 	return Project{}, errors.New( "No such project found" )
 }
-func (c *Cx1client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Project, error) {
+func (c *Cx1Client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Project, error) {
     c.logger.Debugf("Getting projects with name %v of group %v...", projectName, groupID)
     
     var projectResponse struct {
@@ -533,7 +572,7 @@ func (c *Cx1client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
 
 
 // New for Cx1
-func (c *Cx1client) GetProjectConfiguration(projectID string) ([]ProjectConfigurationSetting, error) {
+func (c *Cx1Client) GetProjectConfiguration(projectID string) ([]ProjectConfigurationSetting, error) {
     c.logger.Debug("Getting project configuration")
     var projectConfigurations []ProjectConfigurationSetting
     params := url.Values{
@@ -552,7 +591,7 @@ func (c *Cx1client) GetProjectConfiguration(projectID string) ([]ProjectConfigur
 
 // UpdateProjectConfiguration updates the configuration of the project addressed by projectID
 // Updated for Cx1
-func (c *Cx1client) UpdateProjectConfiguration(projectID string, settings []ProjectConfigurationSetting) error {
+func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []ProjectConfigurationSetting) error {
     if len(settings) == 0 {
         return errors.New("Empty list of settings provided.")
     }
@@ -576,7 +615,7 @@ func (c *Cx1client) UpdateProjectConfiguration(projectID string, settings []Proj
 }
 
 
-func (c *Cx1client) SetProjectBranch( projectID, branch string, allowOverride bool ) error {
+func (c *Cx1Client) SetProjectBranch( projectID, branch string, allowOverride bool ) error {
     var setting ProjectConfigurationSetting
     setting.Key = "scan.handler.git.branch"
     setting.Value = branch
@@ -585,7 +624,7 @@ func (c *Cx1client) SetProjectBranch( projectID, branch string, allowOverride bo
     return c.UpdateProjectConfiguration( projectID, []ProjectConfigurationSetting{setting} )
 }
 
-func (c *Cx1client) SetProjectPreset( projectID, presetName string, allowOverride bool ) error {
+func (c *Cx1Client) SetProjectPreset( projectID, presetName string, allowOverride bool ) error {
     var setting ProjectConfigurationSetting
     setting.Key = "scan.config.sast.presetName"
     setting.Value = presetName
@@ -594,7 +633,7 @@ func (c *Cx1client) SetProjectPreset( projectID, presetName string, allowOverrid
     return c.UpdateProjectConfiguration( projectID, []ProjectConfigurationSetting{setting} )
 }
 
-func (c *Cx1client) SetProjectLanguageMode( projectID, languageMode string, allowOverride bool ) error {
+func (c *Cx1Client) SetProjectLanguageMode( projectID, languageMode string, allowOverride bool ) error {
     var setting ProjectConfigurationSetting
     setting.Key = "scan.config.sast.languageMode"
     setting.Value = languageMode
@@ -603,7 +642,7 @@ func (c *Cx1client) SetProjectLanguageMode( projectID, languageMode string, allo
     return c.UpdateProjectConfiguration( projectID, []ProjectConfigurationSetting{setting} )
 }
 
-func (c *Cx1client) SetProjectFileFilter( projectID, filter string, allowOverride bool ) error {
+func (c *Cx1Client) SetProjectFileFilter( projectID, filter string, allowOverride bool ) error {
     var setting ProjectConfigurationSetting
     setting.Key = "scan.config.sast.filter"
     setting.Value = filter
@@ -617,7 +656,7 @@ func (c *Cx1client) SetProjectFileFilter( projectID, filter string, allowOverrid
 
 
 
-func (c *Cx1client) GetQueries () ([]Query, error) {
+func (c *Cx1Client) GetQueries () ([]Query, error) {
 	c.logger.Debug( "Get Queries" )
     var Queries []Query
 
@@ -629,7 +668,7 @@ func (c *Cx1client) GetQueries () ([]Query, error) {
 
 
 // Reports
-func (c *Cx1client) RequestNewReport(scanID, projectID, branch, reportType string) (string, error) {
+func (c *Cx1Client) RequestNewReport(scanID, projectID, branch, reportType string) (string, error) {
     jsonData := map[string]interface{}{
         "fileFormat": reportType,
         "reportType": "ui",
@@ -668,7 +707,7 @@ func (c *Cx1client) RequestNewReport(scanID, projectID, branch, reportType strin
     return reportResponse.ReportId, err
 }
 
-func (c *Cx1client) GetReportStatus(reportID string) (ReportStatus, error) {
+func (c *Cx1Client) GetReportStatus(reportID string) (ReportStatus, error) {
     var response ReportStatus
 
     data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/reports/%v", reportID), nil, nil )
@@ -681,7 +720,7 @@ func (c *Cx1client) GetReportStatus(reportID string) (ReportStatus, error) {
     return response, nil
 }
 
-func (c *Cx1client) DownloadReport(reportUrl string) ([]byte, error) {
+func (c *Cx1Client) DownloadReport(reportUrl string) ([]byte, error) {
 
     data, err := c.sendRequest( http.MethodGet, reportUrl, nil, nil )
     if err != nil {
@@ -696,7 +735,7 @@ func (c *Cx1client) DownloadReport(reportUrl string) ([]byte, error) {
 // Scans
 // GetScans returns all scan status on the project addressed by projectID
 // todo cleanup systeminstance
-func (c *Cx1client) GetScan(scanID string) (Scan, error) {
+func (c *Cx1Client) GetScan(scanID string) (Scan, error) {
     var scan Scan
 
     data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/scans/%v", scanID), nil, nil )
@@ -710,7 +749,7 @@ func (c *Cx1client) GetScan(scanID string) (Scan, error) {
 }
 
 // GetScans returns all scan status on the project addressed by projectID
-func (c *Cx1client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
+func (c *Cx1Client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
     scans := []Scan{}
     body := url.Values{
         "projectId": {projectID},
@@ -729,7 +768,7 @@ func (c *Cx1client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
     return scans, nil
 }
 
-func (c *Cx1client) scanProject( scanConfig map[string]interface{} ) (Scan, error) {
+func (c *Cx1Client) scanProject( scanConfig map[string]interface{} ) (Scan, error) {
     scan := Scan{}
 
     jsonBody, err := json.Marshal( scanConfig )
@@ -746,10 +785,11 @@ func (c *Cx1client) scanProject( scanConfig map[string]interface{} ) (Scan, erro
     return scan, err
 }
 
-func (c *Cx1client) ScanProjectZip(projectID, sourceUrl, branch string, settings []ScanConfiguration ) (Scan, error) {
+func (c *Cx1Client) ScanProjectZip(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string ) (Scan, error) {
     jsonBody := map[string]interface{}{
         "project" : map[string]interface{}{    "id" : projectID },
         "type": "upload",
+        "tags": tags,
         "handler" : map[string]interface{}{ 
             "uploadurl" : sourceUrl,
             "branch" : branch,
@@ -764,10 +804,11 @@ func (c *Cx1client) ScanProjectZip(projectID, sourceUrl, branch string, settings
     return scan, err
 }
 
-func (c *Cx1client) ScanProjectGit(projectID, repoUrl, branch string, settings []ScanConfiguration ) (Scan, error) {
+func (c *Cx1Client) ScanProjectGit(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string ) (Scan, error) {
     jsonBody := map[string]interface{}{
         "project" : map[string]interface{}{    "id" : projectID },
         "type": "git",
+        "tags": tags,
         "handler" : map[string]interface{}{ 
             "repoUrl" : repoUrl,
             "branch" : branch,
@@ -783,11 +824,11 @@ func (c *Cx1client) ScanProjectGit(projectID, repoUrl, branch string, settings [
 }
 
 // convenience function
-func (c *Cx1client) ScanProject(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration ) (Scan, error) {
+func (c *Cx1Client) ScanProject(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string ) (Scan, error) {
     if scanType == "upload" {
-        return c.ScanProjectZip( projectID, sourceUrl, branch, settings )
+        return c.ScanProjectZip( projectID, sourceUrl, branch, settings, tags )
     } else if scanType == "git" {
-        return c.ScanProjectGit( projectID, sourceUrl, branch, settings )
+        return c.ScanProjectGit( projectID, sourceUrl, branch, settings, tags )
     }
 
     return Scan{}, errors.New( "Invalid scanType provided, must be 'upload' or 'git'" )
@@ -807,7 +848,7 @@ func (s *Scan) IsIncremental() (bool, error) {
 
 
 
-func (c *Cx1client) GetUploadURL () (string,error) {
+func (c *Cx1Client) GetUploadURL () (string,error) {
 	c.logger.Debug( "Get Upload URL" )
 	response, err := c.sendRequest( http.MethodPost, "/api/uploads", nil, nil )
 
@@ -831,7 +872,7 @@ func (c *Cx1client) GetUploadURL () (string,error) {
 
 
 
-func (c *Cx1client) GetUsers () ([]User, error) {
+func (c *Cx1Client) GetUsers () ([]User, error) {
 	c.logger.Debug( "Get Users" )
 
     var Users []User
@@ -848,7 +889,7 @@ func (c *Cx1client) GetUsers () ([]User, error) {
 
 
 
-func (c *Cx1client) ToString() string {
+func (c *Cx1Client) ToString() string {
 	return c.tenant + " on " + c.baseUrl + " with token: " + c.authToken[:4] + "..." + c.authToken[len(c.authToken)-4:]
 }
 
@@ -856,7 +897,7 @@ func (c *Cx1client) ToString() string {
 
 // internal data-parsing
 
-func (c *Cx1client) parseGroups( input []byte ) ([]Group, error) {
+func (c *Cx1Client) parseGroups( input []byte ) ([]Group, error) {
 	//c.logger.Trace( "Parsing groups from: " + input )
 	var groups []interface{}
 
@@ -881,7 +922,7 @@ func (c *Cx1client) parseGroups( input []byte ) ([]Group, error) {
 
 
 
-func (c *Cx1client) parsePresets( input []byte ) ([]Preset, error) {
+func (c *Cx1Client) parsePresets( input []byte ) ([]Preset, error) {
 	//c.logger.Trace( "Parsing presets from: " + input )
 
 	var presets []Preset
@@ -911,7 +952,7 @@ func (c *Cx1client) parsePresets( input []byte ) ([]Preset, error) {
 
 }
 
-func (c *Cx1client) parseProjects( input []byte ) ([]Project, error) {
+func (c *Cx1Client) parseProjects( input []byte ) ([]Project, error) {
 	//c.logger.Trace( "Parsing projects from: " + input )
 	var projectResponse struct {
         TotalCount int
@@ -938,7 +979,7 @@ func (c *Cx1client) parseProjects( input []byte ) ([]Project, error) {
 	return projectList, nil
 }
 
-func (c *Cx1client) parseRunningScans( input []byte ) ([]RunningScan,error) {
+func (c *Cx1Client) parseRunningScans( input []byte ) ([]RunningScan,error) {
 	var scans []RunningScan
 
 	//var scanList []interface{} TODO
@@ -946,7 +987,7 @@ func (c *Cx1client) parseRunningScans( input []byte ) ([]RunningScan,error) {
 	return scans, nil
 }
 
-func (c *Cx1client) parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan, error) {
+func (c *Cx1Client) parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan, error) {
 	//c.logger.Trace( "Parsing scan from interface" )
 	scan := RunningScan{}
 
@@ -975,7 +1016,7 @@ func (c *Cx1client) parseRunningScanFromInterface( input *map[string]interface{}
 	return scan, err
 }
 
-func (c *Cx1client) parseUsers( input []byte ) ([]User, error) {
+func (c *Cx1Client) parseUsers( input []byte ) ([]User, error) {
 	//c.logger.Trace( "Parsing users from: " + input )
 	var users []map[string]interface{}
 
@@ -1003,7 +1044,7 @@ func (c *Cx1client) parseUsers( input []byte ) ([]User, error) {
 	return userList, nil
 }
 
-func (c *Cx1client) parseUserFromInterface( input *map[string]interface{} ) (User, error) {
+func (c *Cx1Client) parseUserFromInterface( input *map[string]interface{} ) (User, error) {
 	c.logger.Trace( "Parsing user from interface" )
     var user User
 
