@@ -2,6 +2,7 @@ package Cx1ClientGo
 
 import (
     "fmt"
+    "io"
     "net/http"
 	"time"
 	"net/url"
@@ -260,181 +261,84 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	}
 }
 
-
-
-// internal calls
-
-func (c *Cx1client) get( api string ) ([]byte,error) {
-
-	cx1_req, err := http.NewRequest(http.MethodGet, c.baseUrl + api, nil)
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+func (c *Cx1client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
+	request, err := http.NewRequest(method, url, body)
 	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
+		return &http.Request{}, err
 	}
 
-	
-	res, err := c.httpClient.Do( cx1_req );
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}	
-	defer res.Body.Close()
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
+	if header != nil {
+		for name, headers := range *header {
+			for _, h := range headers {
+				request.Header.Add(name, h)
+			}
+		}
 	}
 
-	return resBody, nil
-}
 
-func (c *Cx1client) requestBytes( method string, api string, data []byte ) ([]byte,error) {
-    cx1_req, err := http.NewRequest(method, c.baseUrl + api, bytes.NewReader( data ) )
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-	cx1_req.Header.Add( "Content-Type", "application/json" )
-
-	c.logger.Trace( "Sending " + method + " request to " + api )
-	
-	res, err := c.httpClient.Do( cx1_req );
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}	
-	defer res.Body.Close()
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-
-func (c *Cx1client) request( method string, api string, data map[string]interface{} ) ([]byte,error) {
-	jsonBody, err := json.Marshal(data)
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-    return c.requestBytes( method, api, jsonBody )	
-}
-
-func (c *Cx1client) getIAM( api_base string, api string ) ([]byte, error) {
-	rurl := c.iamUrl + api_base + c.tenant + api
-	c.logger.Trace( "Get from IAM " + rurl )
-	cx1_req, err := http.NewRequest(http.MethodGet,rurl, nil)
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	
-	res, err := c.httpClient.Do( cx1_req );
-	defer res.Body.Close()
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-func (c *Cx1client) postIAM( api_base string, api string, data map[string]interface{} ) ([]byte,error) {
-	rurl := c.iamUrl + api_base + c.tenant + api
-
-	jsonBody, err := json.Marshal(data)
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-	c.logger.Trace( "Posting to IAM " + rurl + ": " + string(jsonBody) )
-
-	cx1_req, err := http.NewRequest(http.MethodPost, rurl, strings.NewReader(string(jsonBody)) )
-	cx1_req.Header.Add( "Content-Type", "application/json" )
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	res, err := c.httpClient.Do( cx1_req );
-	defer res.Body.Close()
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
-}
-
-// special call for zip-upload 
-func (c *Cx1client) PutFile( URL string, filename string ) ([]byte,error) {
-	c.logger.Trace( "Putting file " + filename + " to " + URL )
-
-	fileContents, err := ioutil.ReadFile(filename)
-    if err != nil {
-    	c.logger.Error("Failed to Read the File "+ filename + ": " + err.Error())
-		return []byte{}, err
+    header.Set( "Authorization", "Bearer " + c.authToken )
+    if header.Get("User-Agent") == "" {
+        header.Set( "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0" )
     }
 
-	cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader( fileContents ) )
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	cx1_req.Header.Add( "Content-Type", "application/zip" )
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
-	cx1_req.ContentLength = int64(len(fileContents))
-
-	c.logger.Trace( "File contents: " + string(fileContents) )
-
-	res, err := c.httpClient.Do( cx1_req );
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-	defer res.Body.Close()
-
-	
-	resBody,err := ioutil.ReadAll( res.Body )
-
-	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
-		return []byte{}, err
-	}
-
-	return resBody, nil
+	return request, nil
 }
 
+func (c *Cx1client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
+    var bodyBytes []byte
+
+    if body != nil {
+        closer := ioutil.NopCloser(body)
+        bodyBytes, _ = ioutil.ReadAll(closer)
+        defer closer.Close()
+    }
+
+    request, err := c.createRequest( method, url, body, &header, nil )
+    if err != nil {
+        c.logger.Errorf("Unable to create request: %s", err )
+        return []byte{}, err
+    }
+
+
+    response, err := c.httpClient.Do(request)
+    defer response.Body.Close()
+    if err != nil {
+        resBody,err := ioutil.ReadAll( response.Body )
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+        c.logger.Errorf("HTTP request failed with error: %s", err)
+        return []byte{}, err
+    }
+
+    resBody,err := ioutil.ReadAll( response.Body )
+
+	if err != nil {
+		c.logger.Error( "Error reading response body: %s", err )
+		return []byte{}, err
+	}
+
+
+    return resBody, nil
+}
+
+// internal calls
+func (c *Cx1client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
+    cx1url := fmt.Sprintf("%v/api%v", c.baseUrl, url)
+    return c.sendRequestInternal(method, cx1url, body, header )
+}
+
+func (c *Cx1client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
+    iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
+    return c.sendRequestInternal(method, iamurl, body, header)
+}
+
+func (c *Cx1client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte ) {
+    if len(requestBody) != 0 {
+        c.logger.Errorf("Request body: %s", string(requestBody) )
+    }
+    if len(responseBody) != 0 {
+        c.logger.Errorf("Response body: %s", string(responseBody))
+    }
+}
 
 
 // Groups
@@ -443,8 +347,12 @@ func (c *Cx1client) CreateGroup ( groupname string ) (Group, error) {
 	data := map[string]interface{} {
 		"name" : groupname,
 	}
+    jsonBody, err := json.Marshal( data )
+    if err != nil {
+        return Group{}, err
+    }
 
-	_, err := c.postIAM( "/auth/admin/realms/", "/groups", data )
+	_, err = c.sendRequestIAM( http.MethodPost, "/auth/admin/realms/", "/groups", bytes.NewReader( jsonBody ), nil )
     if err != nil {
         c.logger.Error( "Error creating group: " + err.Error() )
         return Group{}, nil
@@ -457,7 +365,7 @@ func (c *Cx1client) GetGroups () ([]Group, error) {
 	c.logger.Debug( "Get Groups" )
     var Groups []Group
 	
-    response, err := c.getIAM( "/auth/admin/realms/", "/groups?briefRepresentation=true" )
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin/realms/", "/groups?briefRepresentation=true", nil, nil )
     if err != nil {
         return Groups, err
     }
@@ -469,7 +377,7 @@ func (c *Cx1client) GetGroups () ([]Group, error) {
 
 func (c *Cx1client) GetGroupByName (groupname string) (Group, error) {
 	c.logger.Debug( "Get Group by name: " + groupname )
-    response, err := c.getIAM( "/auth/admin/realms/", "/groups?briefRepresentation=true&search=" + url.QueryEscape(groupname) )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin/realms/", "/groups?briefRepresentation=true&search=" + url.QueryEscape(groupname), nil, nil )
     if err != nil {
         return Group{}, err
     }
@@ -497,7 +405,7 @@ func (c *Cx1client) GetGroupByName (groupname string) (Group, error) {
 func (c *Cx1client) GetPresets () ([]Preset, error) {
 	c.logger.Debug( "Get Presets" )
     var Presets []Preset
-    response, err := c.get( "/api/queries/presets" )
+    response, err := c.sendRequest( http.MethodGet, "/api/queries/presets", nil, nil )
     if err != nil {
         return Presets, err
     }
@@ -521,9 +429,13 @@ func (c *Cx1client) CreateProject ( projectname string, cx1_group_id string, tag
 		"criticality" : 3,
 		"origin" : "SAST2Cx1",
 	}
+    jsonBody, err := json.Marshal( data )
+    if err != nil {
+        return Project{}, err
+    }
 
     var project Project
-	response, err := c.request( http.MethodPost, "/api/projects", data )
+	response, err := c.sendRequest( http.MethodPost, "/api/projects", bytes.NewReader(jsonBody), nil )
 	if err != nil {
         c.logger.Error( "Error while creating project: " + err.Error() )
         return project, err
@@ -538,7 +450,7 @@ func (c *Cx1client) GetProjects () ([]Project, error) {
 	c.logger.Debug( "Get Projects" )
     var Projects []Project
 	
-    response, err := c.get( "/api/projects/" )
+    response, err := c.sendRequest( http.MethodGet, "/api/projects/", nil, nil )
     if err != nil {
         return Projects, err
     }
@@ -552,7 +464,7 @@ func (c *Cx1client) GetProjectByID(projectID string) (Project, error) {
     c.logger.Debugf("Getting Project with ID %v...", projectID)
     var project Project
 
-    data, err := c.get( fmt.Sprintf("/projects/%v", projectID) )
+    data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/projects/%v", projectID), nil, nil )
     if err != nil {
         return project, errors.Wrapf(err, "fetching project %v failed", projectID)
     }
@@ -562,7 +474,7 @@ func (c *Cx1client) GetProjectByID(projectID string) (Project, error) {
 }
 func (c *Cx1client) GetProjectByName ( projectname string ) (Project,error) {
 	c.logger.Debug( "Get Project By Name: " + projectname )
-    response, err := c.get( "/api/projects?name=" + url.QueryEscape(projectname) )
+    response, err := c.sendRequest( http.MethodGet, "/api/projects?name=" + url.QueryEscape(projectname), nil, nil )
     if err != nil {
         return Project{}, err
     }
@@ -606,9 +518,9 @@ func (c *Cx1client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
 
 
     if len(body) > 0 {
-        data, err = c.get( fmt.Sprintf("/projects/?%v", body.Encode()) )
+        data, err = c.sendRequest( http.MethodGet, fmt.Sprintf("/projects/?%v", body.Encode()), nil, nil )
     } else {
-        data, err = c.get( "/projects/" )
+        data, err = c.sendRequest( http.MethodGet, "/projects/", nil, nil )
     }
     if err != nil {
         return projectResponse.Projects, errors.Wrapf(err, "fetching project %v failed", projectName)
@@ -627,7 +539,7 @@ func (c *Cx1client) GetProjectConfiguration(projectID string) ([]ProjectConfigur
     params := url.Values{
         "project-id":   {projectID},
     }
-    data, err := c.get( fmt.Sprintf( "/configuration/project?%v", params.Encode() ) )
+    data, err := c.sendRequest( http.MethodGet, fmt.Sprintf( "/configuration/project?%v", params.Encode() ), nil, nil )
 
     if err != nil {
         c.logger.Errorf("Failed to get project configuration for project ID %v: %s", projectID, err)
@@ -654,7 +566,7 @@ func (c *Cx1client) UpdateProjectConfiguration(projectID string, settings []Proj
         return err
     }
 
-    _, err = c.requestBytes( http.MethodPatch, fmt.Sprintf( "/configuration/project?%v", params.Encode() ), jsonBody )
+    _, err = c.sendRequest( http.MethodPatch, fmt.Sprintf( "/configuration/project?%v", params.Encode() ), bytes.NewReader( jsonBody ), nil )
     if err != nil {
         c.logger.Errorf( "Failed to update project configuration: %s", err )
         return err
@@ -710,7 +622,7 @@ func (c *Cx1client) GetQueries () ([]Query, error) {
     var Queries []Query
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-	//c.Queries = parseQueries( c.get( "/api/queries" ) )
+	//c.Queries = parseQueries( c.sendRequest( http.MethodGet, "/api/queries" ) )
 
 	return Queries, nil
 }
@@ -735,8 +647,13 @@ func (c *Cx1client) RequestNewReport(scanID, projectID, branch, reportType strin
             "host":"",
         },
     }
+    
+    jsonBody, err := json.Marshal( jsonData )
+    if err != nil {
+        return "", err
+    }
 
-    data, err := c.request( http.MethodPost, "/reports", jsonData )
+    data, err := c.sendRequest( http.MethodPost, "/reports", bytes.NewReader( jsonBody ), nil )
     if err != nil {
         return "", errors.Wrapf(err, "Failed to trigger report generation for scan %v", scanID)
     } else {
@@ -754,7 +671,7 @@ func (c *Cx1client) RequestNewReport(scanID, projectID, branch, reportType strin
 func (c *Cx1client) GetReportStatus(reportID string) (ReportStatus, error) {
     var response ReportStatus
 
-    data, err := c.get( fmt.Sprintf("/reports/%v", reportID) )
+    data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/reports/%v", reportID), nil, nil )
     if err != nil {
         c.logger.Errorf("Failed to fetch report status for reportID %v: %s", reportID, err)
         return response, errors.Wrapf(err, "failed to fetch report status for reportID %v", reportID)
@@ -766,7 +683,7 @@ func (c *Cx1client) GetReportStatus(reportID string) (ReportStatus, error) {
 
 func (c *Cx1client) DownloadReport(reportUrl string) ([]byte, error) {
 
-    data, err := c.get( reportUrl )
+    data, err := c.sendRequest( http.MethodGet, reportUrl, nil, nil )
     if err != nil {
         return []byte{}, errors.Wrapf(err, "failed to download report from url: %v", reportUrl)
     }
@@ -782,7 +699,7 @@ func (c *Cx1client) DownloadReport(reportUrl string) ([]byte, error) {
 func (c *Cx1client) GetScan(scanID string) (Scan, error) {
     var scan Scan
 
-    data, err := c.get( fmt.Sprintf("/scans/%v", scanID) )
+    data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/scans/%v", scanID), nil, nil )
     if err != nil {
         c.logger.Errorf("Failed to fetch scan with ID %v: %s", scanID, err)
         return scan, errors.Wrapf(err, "failed to fetch scan with ID %v", scanID)
@@ -802,7 +719,7 @@ func (c *Cx1client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
         "sort":        {"+created_at"},
     }
 
-    data, err := c.get( fmt.Sprintf("/scans?%v", body.Encode()) )
+    data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil )
     if err != nil {
         c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
         return scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
@@ -814,7 +731,13 @@ func (c *Cx1client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
 
 func (c *Cx1client) scanProject( scanConfig map[string]interface{} ) (Scan, error) {
     scan := Scan{}
-    data, err := c.request( http.MethodPost, "/scans", scanConfig )
+
+    jsonBody, err := json.Marshal( scanConfig )
+    if err != nil {
+        return scan, err
+    }
+
+    data, err := c.sendRequest( http.MethodPost, "/scans", bytes.NewReader( jsonBody ), nil )
     if err != nil {
         return scan, err
     }
@@ -886,8 +809,7 @@ func (s *Scan) IsIncremental() (bool, error) {
 
 func (c *Cx1client) GetUploadURL () (string,error) {
 	c.logger.Debug( "Get Upload URL" )
-	data := make( map[string]interface{}, 0 )
-	response, err := c.request( http.MethodPost, "/api/uploads", data )
+	response, err := c.sendRequest( http.MethodPost, "/api/uploads", nil, nil )
 
     if err != nil {
         c.logger.Error( "Unable to get URL: " + err.Error() )
@@ -914,7 +836,7 @@ func (c *Cx1client) GetUsers () ([]User, error) {
 
     var Users []User
     // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-    response, err := c.getIAM( "/auth/admin/realms/", "/users?briefRepresentation=true" )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin/realms/", "/users?briefRepresentation=true", nil, nil )
     if err != nil {
         return Users, err
     }
