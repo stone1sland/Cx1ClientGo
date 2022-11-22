@@ -40,7 +40,7 @@ func (c *Cx1Cache) ProjectSummary() string {
 	
 	return strconv.Itoa( len( c.Projects ) ) + " projects"
 }
-func (c *Cx1Cache) RefreshCache( client *Cx1Client ) error {
+func (c *Cx1Cache) Refresh( client *Cx1Client ) error {
     var err error
 	c.Projects, err = client.GetProjects()
     if err != nil {

@@ -267,18 +267,15 @@ func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *ht
 		return &http.Request{}, err
 	}
 
-	if header != nil {
-		for name, headers := range *header {
-			for _, h := range headers {
-				request.Header.Add(name, h)
-			}
-		}
-	}
+    for name, headers := range *header {
+        for _, h := range headers {
+            request.Header.Add(name, h)
+        }
+    }
 
-
-    header.Set( "Authorization", "Bearer " + c.authToken )
-    if header.Get("User-Agent") == "" {
-        header.Set( "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0" )
+    request.Header.Set( "Authorization", "Bearer " + c.authToken )
+    if request.Header.Get("User-Agent") == "" {
+        request.Header.Set( "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0" )
     }
 
 	return request, nil
@@ -391,7 +388,7 @@ func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
         return Group{}, err
     }
 
-	_, err = c.sendRequestIAM( http.MethodPost, "/auth/admin/realms/", "/groups", bytes.NewReader( jsonBody ), nil )
+	_, err = c.sendRequestIAM( http.MethodPost, "/auth/admin", "/groups", bytes.NewReader( jsonBody ), nil )
     if err != nil {
         c.logger.Error( "Error creating group: " + err.Error() )
         return Group{}, nil
@@ -404,7 +401,7 @@ func (c *Cx1Client) GetGroups () ([]Group, error) {
 	c.logger.Debug( "Get Groups" )
     var Groups []Group
 	
-    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin/realms/", "/groups?briefRepresentation=true", nil, nil )
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/groups?briefRepresentation=true", nil, nil )
     if err != nil {
         return Groups, err
     }
@@ -416,7 +413,7 @@ func (c *Cx1Client) GetGroups () ([]Group, error) {
 
 func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
 	c.logger.Debug( "Get Group by name: " + groupname )
-    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin/realms/", "/groups?briefRepresentation=true&search=" + url.QueryEscape(groupname), nil, nil )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/groups?briefRepresentation=true&search=" + url.QueryEscape(groupname), nil, nil )
     if err != nil {
         return Group{}, err
     }
@@ -444,7 +441,7 @@ func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
 func (c *Cx1Client) GetPresets () ([]Preset, error) {
 	c.logger.Debug( "Get Presets" )
     var Presets []Preset
-    response, err := c.sendRequest( http.MethodGet, "/api/queries/presets", nil, nil )
+    response, err := c.sendRequest( http.MethodGet, "/queries/presets", nil, nil )
     if err != nil {
         return Presets, err
     }
@@ -474,7 +471,7 @@ func (c *Cx1Client) CreateProject ( projectname string, cx1_group_id string, tag
     }
 
     var project Project
-	response, err := c.sendRequest( http.MethodPost, "/api/projects", bytes.NewReader(jsonBody), nil )
+	response, err := c.sendRequest( http.MethodPost, "/projects", bytes.NewReader(jsonBody), nil )
 	if err != nil {
         c.logger.Error( "Error while creating project: " + err.Error() )
         return project, err
@@ -489,7 +486,7 @@ func (c *Cx1Client) GetProjects () ([]Project, error) {
 	c.logger.Debug( "Get Projects" )
     var Projects []Project
 	
-    response, err := c.sendRequest( http.MethodGet, "/api/projects/", nil, nil )
+    response, err := c.sendRequest( http.MethodGet, "/projects/", nil, nil )
     if err != nil {
         return Projects, err
     }
@@ -513,7 +510,7 @@ func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
 }
 func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
 	c.logger.Debug( "Get Project By Name: " + projectname )
-    response, err := c.sendRequest( http.MethodGet, "/api/projects?name=" + url.QueryEscape(projectname), nil, nil )
+    response, err := c.sendRequest( http.MethodGet, "/projects?name=" + url.QueryEscape(projectname), nil, nil )
     if err != nil {
         return Project{}, err
     }
@@ -661,7 +658,7 @@ func (c *Cx1Client) GetQueries () ([]Query, error) {
     var Queries []Query
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-	//c.Queries = parseQueries( c.sendRequest( http.MethodGet, "/api/queries" ) )
+	//c.Queries = parseQueries( c.sendRequest( http.MethodGet, "/queries" ) )
 
 	return Queries, nil
 }
@@ -850,7 +847,7 @@ func (s *Scan) IsIncremental() (bool, error) {
 
 func (c *Cx1Client) GetUploadURL () (string,error) {
 	c.logger.Debug( "Get Upload URL" )
-	response, err := c.sendRequest( http.MethodPost, "/api/uploads", nil, nil )
+	response, err := c.sendRequest( http.MethodPost, "/uploads", nil, nil )
 
     if err != nil {
         c.logger.Error( "Unable to get URL: " + err.Error() )
@@ -877,7 +874,7 @@ func (c *Cx1Client) GetUsers () ([]User, error) {
 
     var Users []User
     // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin/realms/", "/users?briefRepresentation=true", nil, nil )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/users?briefRepresentation=true", nil, nil )
     if err != nil {
         return Users, err
     }
@@ -905,8 +902,8 @@ func (c *Cx1Client) parseGroups( input []byte ) ([]Group, error) {
 
 	err := json.Unmarshal( input, &groups )
 	if err != nil {
-		c.logger.Error("Error: " + err.Error() )
-		//c.logger.Error( "Input was: " + input )
+		c.logger.Errorf("Error: %s", err.Error() )
+		c.logger.Errorf( "Input was: %v", string(input) )
 		return groupList, err
 	} else {
 		groupList = make([]Group, len(groups) )
@@ -931,8 +928,8 @@ func (c *Cx1Client) parsePresets( input []byte ) ([]Preset, error) {
 
     err = json.Unmarshal( []byte( input ), &presetResponse )
     if err != nil {
-		c.logger.Error("Error: " + err.Error() )
-		//c.logger.Error( "Input was: " + input )
+		c.logger.Errorf("Error: %s", err.Error() )
+		c.logger.Errorf( "Input was: %v", string(input) )
 		return presets, err
 	}
 
@@ -963,7 +960,8 @@ func (c *Cx1Client) parseProjects( input []byte ) ([]Project, error) {
 
 	err := json.Unmarshal( []byte( input ), &projectResponse )
 	if err != nil {
-		c.logger.Error("Error: " + err.Error() )
+		c.logger.Errorf("Error: %s", err.Error() )
+		c.logger.Errorf( "Input was: %v", string(input) )
 		return projectList, err
 	}
 
@@ -1024,8 +1022,8 @@ func (c *Cx1Client) parseUsers( input []byte ) ([]User, error) {
 
 	err := json.Unmarshal( []byte( input ), &users )
 	if err != nil {
-		c.logger.Error("Error: " + err.Error() )
-		//c.logger.Error( "Input was: " + input )
+		c.logger.Errorf("Error: %s", err.Error() )
+		c.logger.Errorf( "Input was: %v", string(input) )
 		return userList, err
 	} else {
 		userList = make([]User, 0 )
