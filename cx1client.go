@@ -71,7 +71,7 @@ type ProjectConfigurationSetting struct {
 }
 
 type Query struct {
-	QueryID string
+	QueryID uint64
 	Name string
 }
 
@@ -113,6 +113,52 @@ type Scan struct {
 type ScanConfiguration struct {
     ScanType string `json:"type"`
     Values map[string]string `json:"value"`
+}
+
+type ScanResultData struct {
+    QueryID         uint64
+    QueryName       string
+    Group           string
+    ResultHash      string
+    LanguageName    string
+    Nodes           []ScanResultNodes
+}
+
+type ScanResultNodes struct {
+    ID              string
+    Line            int
+    Name            string
+    Column          int
+    Length          int
+    Method          string
+    NodeID          int
+    DOMType         string
+    FileName        string
+    FullName        string
+    TypeName        string
+    MethodLine      int
+    Definitions     string 
+}
+
+type ScanResults struct {
+    Type            string
+    ResultID        string              `json:"id"`
+    SimilarityID    string
+    Status          string
+    State           string
+    Severity        string
+    CreatedAt       string              `json:"created"`
+    FirstFoundAt    string
+    FoundAt         string
+    FirstScanId     string
+    Description     string
+    Data            ScanResultData
+    VulnerabilityDetails ScanResultDetails 
+}
+
+type ScanResultDetails struct {
+    CweId           int
+    Compliances     []string
 }
 
 type ScanStatusDetails struct {
@@ -229,12 +275,11 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	}
 	
 	res, err := client.Do( cx1_req );
-	defer res.Body.Close()
-
 	if err != nil {
 		logger.Error( "Error: " + err.Error() )
 		return "", err
 	}
+    defer res.Body.Close()
 
 	resBody,err := ioutil.ReadAll( res.Body )
 
@@ -278,43 +323,53 @@ func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *ht
         request.Header.Set( "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0" )
     }
 
+    if request.Header.Get("Content-Type") == "" {
+        request.Header.Set( "Content-Type", "application/json" )
+    }
+
 	return request, nil
 }
 
 func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
-    var bodyBytes []byte
+    var requestBody io.Reader
+    var requestBodyCopy io.Reader
 
     if body != nil {
         closer := ioutil.NopCloser(body)
-        bodyBytes, _ = ioutil.ReadAll(closer)
+        bodyBytes, _ := ioutil.ReadAll(closer)
+        requestBody = bytes.NewBuffer(bodyBytes)
+        requestBodyCopy = bytes.NewBuffer(bodyBytes)
         defer closer.Close()
     }
 
-    request, err := c.createRequest( method, url, body, &header, nil )
+    request, err := c.createRequest( method, url, requestBody, &header, nil )
     if err != nil {
         c.logger.Errorf("Unable to create request: %s", err )
         return []byte{}, err
     }
 
-
     response, err := c.httpClient.Do(request)
     defer response.Body.Close()
-    if err != nil {
-        resBody,err := ioutil.ReadAll( response.Body )
-        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-        c.logger.Errorf("HTTP request failed with error: %s", err)
-        return []byte{}, err
+    if err != nil || response.StatusCode >= 400 {
+        resBody,_ := ioutil.ReadAll( response.Body )
+        reqBody,_ := ioutil.ReadAll( requestBodyCopy )
+        c.recordRequestDetailsInErrorCase(reqBody, resBody)
+        if err != nil {
+            c.logger.Errorf("HTTP request failed with error: %s", err)
+        } else {
+            c.logger.Errorf("HTTP request returned code: %s", response.Status)
+        }
+        return resBody, err
     }
-
+    
     resBody,err := ioutil.ReadAll( response.Body )
 
 	if err != nil {
-		c.logger.Error( "Error reading response body: %s", err )
-		return []byte{}, err
+		c.logger.Errorf( "Error reading response body: %s", err )
+        c.logger.Errorf( "Parsed: %v", string(resBody) )
 	}
 
-
-    return resBody, nil
+    return resBody, err
 }
 
 // internal calls
@@ -565,7 +620,32 @@ func (c *Cx1Client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
     err = json.Unmarshal( data, &projectResponse)
     return projectResponse.Projects, err
 }
+func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResults, error) {
+	c.logger.Debug( "Get Scan Results" )
+    var resultResponse struct {
+        Results         []ScanResults
+        TotalCount      int
+    }
+    
+    params := url.Values{
+        "scan-id":   {scanID},
+    }
+    	
+    response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil )
+    if err != nil && len(response) == 0 {
+        c.logger.Errorf( "Failed to retrieve scan results for scan ID %v", scanID )
+        return []ScanResults{}, err
+    }
 
+    err = json.Unmarshal( response, &resultResponse )
+    if err != nil {
+        c.logger.Errorf( "Failed while parsing response: %s", err )
+        c.logger.Tracef( "Response contents: %s", string(response) )
+        return []ScanResults{}, err
+    }
+    c.logger.Debugf( "Retrieved %d results", resultResponse.TotalCount )
+    return resultResponse.Results, nil	
+}
 
 
 // New for Cx1
@@ -692,8 +772,6 @@ func (c *Cx1Client) RequestNewReport(scanID, projectID, branch, reportType strin
     data, err := c.sendRequest( http.MethodPost, "/reports", bytes.NewReader( jsonBody ), nil )
     if err != nil {
         return "", errors.Wrapf(err, "Failed to trigger report generation for scan %v", scanID)
-    } else {
-        c.logger.Infof( "Generating report %v", data )
     }
 
     var reportResponse struct {
@@ -713,13 +791,13 @@ func (c *Cx1Client) GetReportStatus(reportID string) (ReportStatus, error) {
         return response, errors.Wrapf(err, "failed to fetch report status for reportID %v", reportID)
     }
 
-    json.Unmarshal( [] byte(data), &response)
-    return response, nil
+    err = json.Unmarshal( [] byte(data), &response)
+    return response, err
 }
 
 func (c *Cx1Client) DownloadReport(reportUrl string) ([]byte, error) {
 
-    data, err := c.sendRequest( http.MethodGet, reportUrl, nil, nil )
+    data, err := c.sendRequestInternal( http.MethodGet, reportUrl, nil, nil )
     if err != nil {
         return []byte{}, errors.Wrapf(err, "failed to download report from url: %v", reportUrl)
     }
