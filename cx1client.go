@@ -391,7 +391,7 @@ func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 	_, err = c.sendRequestIAM( http.MethodPost, "/auth/admin", "/groups", bytes.NewReader( jsonBody ), nil )
     if err != nil {
         c.logger.Error( "Error creating group: " + err.Error() )
-        return Group{}, nil
+        return Group{}, err
     }
 
 	return c.GetGroupByName( groupname )
