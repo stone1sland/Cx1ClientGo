@@ -12,7 +12,6 @@ import (
 	"bytes"
     "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"strconv"
 )
 
 
@@ -209,7 +208,7 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 
 
 func getTokenOIDC( client *http.Client, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger ) (string, error) {
-	login_url := iam_url + "/auth/realms/" + tenant + "/protocol/openid-connect/token"
+	login_url := fmt.Sprintf( "%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant )
 	
 	data := url.Values{}
 	data.Set( "grant_type", "client_credentials" )
@@ -217,12 +216,12 @@ func getTokenOIDC( client *http.Client, iam_url string, tenant string, client_id
 	data.Set( "client_secret", client_secret )
 
 	
-	logger.Info( "Authenticating with Cx1 at: "+login_url )
+	logger.Infof( "Authenticating with Cx1 at: %v", login_url )
 
 	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
 	cx1_req.Header.Add( "Content-Type", "application/x-www-form-urlencoded" )
 	if err != nil {
-		logger.Error( "Error: " + err.Error() )
+		logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 
@@ -230,19 +229,17 @@ func getTokenOIDC( client *http.Client, iam_url string, tenant string, client_id
 	defer res.Body.Close()
 
 	if err != nil {
-		logger.Error( "Error: " + err.Error() )
+		logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 
 	resBody,err := ioutil.ReadAll( res.Body )
 
 	if err != nil {
-		logger.Error( "Error: " + err.Error() )
+		logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 
-
-	//logger.Trace( "  received response: " + string(resBody) )
 	var jsonBody map[string]interface{}
 
 	err = json.Unmarshal(resBody, &jsonBody)
@@ -250,14 +247,14 @@ func getTokenOIDC( client *http.Client, iam_url string, tenant string, client_id
 	if ( err == nil ) {
 		return jsonBody["access_token"].(string), nil
 	} else {
-		logger.Error( "Error parsing response: " + err.Error() )
-		logger.Error( "Input was: " + string(resBody) )
+		logger.Errorf( "Error parsing response: %s", err )
+		logger.Tracef( "Input was: %s", string(resBody) )
 		return "", err
 	}
 }
 
 func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key string, logger *logrus.Logger ) (string, error) {
-	login_url := iam_url + "/auth/realms/" + tenant + "/protocol/openid-connect/token"
+	login_url := fmt.Sprintf( "%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant )
 	
 	data := url.Values{}
 	data.Set( "grant_type", "refresh_token" )
@@ -265,18 +262,18 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	data.Set( "refresh_token", api_key )
 
 	
-	logger.Info( "Authenticating with Cx1 at: "+login_url )
+	logger.Info( "Authenticating with Cx1 at: %v", login_url )
 
 	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
 	cx1_req.Header.Add( "Content-Type", "application/x-www-form-urlencoded" )
 	if err != nil {
-		logger.Error( "Error: " + err.Error() )
+		logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 	
 	res, err := client.Do( cx1_req );
 	if err != nil {
-		logger.Error( "Error: " + err.Error() )
+		logger.Errorf( "Error: %s", err )
 		return "", err
 	}
     defer res.Body.Close()
@@ -284,11 +281,10 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	resBody,err := ioutil.ReadAll( res.Body )
 
 	if err != nil {
-		logger.Error( "Error: " + err.Error() )
+		logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 
-	logger.Trace( "  received response: " + string(resBody) )
 	var jsonBody map[string]interface{}
 
 	err = json.Unmarshal(resBody, &jsonBody)
@@ -296,8 +292,8 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	if ( err == nil ) {
 		return jsonBody["access_token"].(string), nil
 	} else {
-		logger.Error( "Error parsing response: " + err.Error() )
-		logger.Error( "Input was: " + string(resBody) )
+		logger.Errorf( "Error parsing response: %s", err )
+		logger.Tracef( "Input was: %v", string(resBody) )
 		return "", err
 	}
 }
@@ -318,7 +314,7 @@ func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *ht
         }
     }
 
-    request.Header.Set( "Authorization", "Bearer " + c.authToken )
+    request.Header.Set( "Authorization", fmt.Sprintf("Bearer %v", c.authToken ) )
     if request.Header.Get("User-Agent") == "" {
         request.Header.Set( "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0" )
     }
@@ -366,7 +362,7 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 
 	if err != nil {
 		c.logger.Errorf( "Error reading response body: %s", err )
-        c.logger.Errorf( "Parsed: %v", string(resBody) )
+        c.logger.Tracef( "Parsed: %v", string(resBody) )
 	}
 
     return resBody, err
@@ -393,29 +389,27 @@ func (c *Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, response
 }
 
 func (c Cx1Client) PutFile( URL string, filename string ) (string,error) {
-	c.logger.Trace( "Putting file " + filename + " to " + URL )
+	c.logger.Tracef( "Putting file %v to %v", filename, URL )
 
 	fileContents, err := ioutil.ReadFile(filename)
     if err != nil {
-    	c.logger.Error("Failed to Read the File "+ filename + ": " + err.Error())
+    	c.logger.Errorf("Failed to Read the File %v: %s", filename, err)
 		return "", err
     }
 
 	cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader( fileContents ) )
 	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
+		c.logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 
 	cx1_req.Header.Add( "Content-Type", "application/zip" )
-	cx1_req.Header.Add( "Authorization", "Bearer " + c.authToken )
+	cx1_req.Header.Add( "Authorization", fmt.Sprintf("Bearer %v", c.authToken ) )
 	cx1_req.ContentLength = int64(len(fileContents))
-
-	c.logger.Trace( "File contents: " + string(fileContents) )
 
 	res, err := c.httpClient.Do( cx1_req );
 	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
+		c.logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 	defer res.Body.Close()
@@ -424,7 +418,7 @@ func (c Cx1Client) PutFile( URL string, filename string ) (string,error) {
 	resBody,err := ioutil.ReadAll( res.Body )
 
 	if err != nil {
-		c.logger.Error( "Error: " + err.Error() )
+		c.logger.Errorf( "Error: %s", err )
 		return "", err
 	}
 
@@ -434,7 +428,7 @@ func (c Cx1Client) PutFile( URL string, filename string ) (string,error) {
 
 // Groups
 func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
-	c.logger.Debug( "Create Group: name " + groupname  )
+	c.logger.Debugf( "Create Group: %v ", groupname  )
 	data := map[string]interface{} {
 		"name" : groupname,
 	}
@@ -445,7 +439,7 @@ func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 
 	_, err = c.sendRequestIAM( http.MethodPost, "/auth/admin", "/groups", bytes.NewReader( jsonBody ), nil )
     if err != nil {
-        c.logger.Error( "Error creating group: " + err.Error() )
+        c.logger.Errorf( "Error creating group: %s", err )
         return Group{}, err
     }
 
@@ -462,24 +456,24 @@ func (c *Cx1Client) GetGroups () ([]Group, error) {
     }
 
     Groups, err = c.parseGroups( response )
-    c.logger.Trace( "Got " + strconv.Itoa( len(Groups) ) + " groups" )
+    c.logger.Tracef( "Got %d groups", len(Groups) )
     return Groups, err
 }
 
 func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
-	c.logger.Debug( "Get Group by name: " + groupname )
-    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/groups?briefRepresentation=true&search=" + url.QueryEscape(groupname), nil, nil )
+	c.logger.Debugf( "Get Group by name: %v", groupname )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf( "/groups?briefRepresentation=true&search=%v", url.QueryEscape(groupname)), nil, nil )
     if err != nil {
         return Group{}, err
     }
 	groups, err := c.parseGroups( response )
 	
     if err != nil {
-        c.logger.Error( "Error retrieving group: " + err.Error() )
+        c.logger.Errorf( "Error retrieving group: %s", err )
         return Group{}, err
     }
 
-	c.logger.Trace( "Got " + strconv.Itoa( len(groups) ) + " groups" )
+	c.logger.Tracef( "Got %d groups", len(groups) )
 
 	for i := range groups {
 		if groups[i].Name == groupname {
@@ -502,7 +496,7 @@ func (c *Cx1Client) GetPresets () ([]Preset, error) {
     }
 
     Presets, err = c.parsePresets( response )
-    c.logger.Trace( "Got " + strconv.Itoa( len(Presets) ) + " presets" )
+    c.logger.Tracef( "Got %d presets", len(Presets) )
     return Presets, err
 }
 
@@ -512,7 +506,7 @@ func (c *Cx1Client) GetPresets () ([]Preset, error) {
 
 // Projects
 func (c *Cx1Client) CreateProject ( projectname string, cx1_group_id string, tags map[string]string ) (Project,error) {
-	c.logger.Debug ( "Create Project: name " + projectname + ", group id " + cx1_group_id )
+	c.logger.Debugf ( "Create Project: %v, group id %v", projectname, cx1_group_id )
 	data := map[string]interface{} {
 		"name" : projectname,
 		"groups" : []string{ cx1_group_id },
@@ -528,7 +522,7 @@ func (c *Cx1Client) CreateProject ( projectname string, cx1_group_id string, tag
     var project Project
 	response, err := c.sendRequest( http.MethodPost, "/projects", bytes.NewReader(jsonBody), nil )
 	if err != nil {
-        c.logger.Error( "Error while creating project: " + err.Error() )
+        c.logger.Errorf( "Error while creating project: %s", err )
         return project, err
 	}
     
@@ -547,7 +541,7 @@ func (c *Cx1Client) GetProjects () ([]Project, error) {
     }
 
     Projects, err = c.parseProjects( response )
-    c.logger.Trace( "Retrieved " + strconv.Itoa( len(Projects) ) + " projects")
+    c.logger.Tracef( "Retrieved %d projects",  len(Projects) )
     return Projects, err
 	
 }
@@ -564,19 +558,19 @@ func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
     return project, err
 }
 func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
-	c.logger.Debug( "Get Project By Name: " + projectname )
-    response, err := c.sendRequest( http.MethodGet, "/projects?name=" + url.QueryEscape(projectname), nil, nil )
+	c.logger.Debugf( "Get Project By Name: %v", projectname )
+    response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/projects?name=%v", url.QueryEscape(projectname)), nil, nil )
     if err != nil {
         return Project{}, err
     }
 
 	projects, err := c.parseProjects( response )
     if err != nil {
-        c.logger.Error( "Error getting project: " + err.Error() )
+        c.logger.Errorf( "Error getting project: %s", err )
         return Project{}, err
     }
 
-	c.logger.Trace( "Got " + strconv.Itoa( len(projects) ) + " projects" )
+	c.logger.Tracef( "Retrieved %d projects", len(projects) ) 
 
 	for i := range projects {
 		if projects[i].Name == projectname {
@@ -928,16 +922,16 @@ func (c *Cx1Client) GetUploadURL () (string,error) {
 	response, err := c.sendRequest( http.MethodPost, "/uploads", nil, nil )
 
     if err != nil {
-        c.logger.Error( "Unable to get URL: " + err.Error() )
+        c.logger.Errorf( "Unable to get Upload URL: %s", err )
         return "", err
     } 
 
 	var jsonBody map[string]interface{}
 
-	err = json.Unmarshal( []byte( response ), &jsonBody )
+	err = json.Unmarshal( response, &jsonBody )
 	if err != nil {
-		c.logger.Error("Error: " + err.Error() )
-		//c.logger.Error( "Input was: " + response )
+		c.logger.Errorf("Error: %s", err )
+		c.logger.Tracef( "Input was: %s", string(response) )
 		return "", err
 	} else {
 		return jsonBody["url"].(string), nil
@@ -958,14 +952,14 @@ func (c *Cx1Client) GetUsers () ([]User, error) {
     }
 
     Users, err = c.parseUsers( response )
-    c.logger.Trace( "Got " + strconv.Itoa( len(Users) ) + " users" )
+    c.logger.Tracef( "Got %d users", len(Users) )
     return Users, err 
 }
 
 
 
 func (c *Cx1Client) ToString() string {
-	return c.tenant + " on " + c.baseUrl + " with token: " + c.authToken[:4] + "..." + c.authToken[len(c.authToken)-4:]
+	return fmt.Sprintf( "%v on %v with token: %v...%v", c.tenant, c.baseUrl, c.authToken[:4], c.authToken[len(c.authToken)-4:] )
 }
 
 
@@ -973,15 +967,15 @@ func (c *Cx1Client) ToString() string {
 // internal data-parsing
 
 func (c *Cx1Client) parseGroups( input []byte ) ([]Group, error) {
-	//c.logger.Trace( "Parsing groups from: " + input )
+	//c.logger.Tracef( "Parsing groups from: %v", string(input) )
 	var groups []interface{}
 
 	var groupList []Group
 
 	err := json.Unmarshal( input, &groups )
 	if err != nil {
-		c.logger.Errorf("Error: %s", err.Error() )
-		c.logger.Errorf( "Input was: %v", string(input) )
+		c.logger.Errorf("Error: %s", err )
+		c.logger.Tracef( "Input was: %v", string(input) )
 		return groupList, err
 	} else {
 		groupList = make([]Group, len(groups) )
@@ -998,7 +992,7 @@ func (c *Cx1Client) parseGroups( input []byte ) ([]Group, error) {
 
 
 func (c *Cx1Client) parsePresets( input []byte ) ([]Preset, error) {
-	//c.logger.Trace( "Parsing presets from: " + input )
+	//c.logger.Tracef( "Parsing presets from: %v", string(input) )
 
 	var presets []Preset
     var presetResponse []map[string]interface{}
@@ -1006,29 +1000,24 @@ func (c *Cx1Client) parsePresets( input []byte ) ([]Preset, error) {
 
     err = json.Unmarshal( []byte( input ), &presetResponse )
     if err != nil {
-		c.logger.Errorf("Error: %s", err.Error() )
-		c.logger.Errorf( "Input was: %v", string(input) )
+		c.logger.Errorf("Error: %s", err )
+		c.logger.Tracef( "Input was: %v", string(input) )
 		return presets, err
 	}
 
     presets = make( []Preset, len(presetResponse) )
 
     for id, p := range presetResponse {
-        //c.logger.Debug( " - " + strconv.Itoa( int(p["id"].(float64)) ) + ": " + p["name"].(string) )
         presets[id].PresetID = int(p["id"].(float64))
         presets[id].Name = p["name"].(string)
     }
-
-
-
-    //c.logger.Trace( "Preset1: " + presets[0].PresetID + ", " + preset[0].Name )
 
 	return presets, nil
 
 }
 
 func (c *Cx1Client) parseProjects( input []byte ) ([]Project, error) {
-	//c.logger.Trace( "Parsing projects from: " + input )
+	//c.logger.Tracef( "Parsing projects from: %v", string(input) )
 	var projectResponse struct {
         TotalCount int
         filteredTotalCount int
@@ -1038,8 +1027,8 @@ func (c *Cx1Client) parseProjects( input []byte ) ([]Project, error) {
 
 	err := json.Unmarshal( []byte( input ), &projectResponse )
 	if err != nil {
-		c.logger.Errorf("Error: %s", err.Error() )
-		c.logger.Errorf( "Input was: %v", string(input) )
+		c.logger.Errorf("Error: %s", err )
+		c.logger.Tracef( "Input was: %v", string(input) )
 		return projectList, err
 	}
 
@@ -1077,7 +1066,7 @@ func (c *Cx1Client) parseRunningScanFromInterface( input *map[string]interface{}
 	scan.CreatedAt, err = time.Parse(time.RFC3339, (*input)["createdAt"].(string) )
 
 	if err != nil {
-		c.logger.Warn( "Failed to parse time from " + (*input)["createdAt"].(string) )
+		c.logger.Warnf( "Failed to parse time from %v", (*input)["createdAt"].(string) )
 	}
 
 
@@ -1085,7 +1074,7 @@ func (c *Cx1Client) parseRunningScanFromInterface( input *map[string]interface{}
 	scan.UpdatedAt, err2 = time.Parse(time.RFC3339, (*input)["updatedAt"].(string) )
 
 	if err2 != nil {
-		c.logger.Warn( "Failed to parse time from " + (*input)["updatedAt"].(string) )
+		c.logger.Warnf( "Failed to parse time from %v", (*input)["updatedAt"].(string) )
         err = errors.Wrap( err, err2.Error() )
 	}
 
@@ -1093,15 +1082,15 @@ func (c *Cx1Client) parseRunningScanFromInterface( input *map[string]interface{}
 }
 
 func (c *Cx1Client) parseUsers( input []byte ) ([]User, error) {
-	//c.logger.Trace( "Parsing users from: " + input )
+	//c.logger.Tracef( "Parsing users from: %v", string(input) )
 	var users []map[string]interface{}
 
 	var userList []User
 
 	err := json.Unmarshal( []byte( input ), &users )
 	if err != nil {
-		c.logger.Errorf("Error: %s", err.Error() )
-		c.logger.Errorf( "Input was: %v", string(input) )
+		c.logger.Errorf("Error: %s", err )
+		c.logger.Tracef( "Input was: %v", string(input) )
 		return userList, err
 	} else {
 		userList = make([]User, 0 )
@@ -1109,7 +1098,7 @@ func (c *Cx1Client) parseUsers( input []byte ) ([]User, error) {
 		for _, u := range users {
 			user, err := c.parseUserFromInterface( &u )			
 			if err != nil {
-                c.logger.Error("Failed to parse user: " + err.Error() )
+                c.logger.Errorf("Failed to parse user: %s", err )
 
             } else {
 				userList = append( userList, user )
