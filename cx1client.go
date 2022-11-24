@@ -114,6 +114,16 @@ type ScanConfiguration struct {
     Values map[string]string `json:"value"`
 }
 
+type ScanMetadata struct {
+    scanID          string
+    ProjectID       string
+    Local           uint64
+    fileCount       uint64
+    IsIncremental   bool
+    IsIncrementalCanceled bool
+    PresetName      string
+}
+
 type ScanResultData struct {
     QueryID         uint64
     QueryName       string
@@ -485,6 +495,24 @@ func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
 	return Group{}, errors.New( "No matching group found" )
 }
 
+// New for Cx1
+func (c *Cx1Client) GetGroupByID( groupID string ) (Group, error) {
+    c.logger.Debugf("Getting Group with ID %v...", groupID)
+    var group Group
+
+    body := url.Values {
+        "briefRepresentation" : {"true"},
+    }
+
+    data, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v?%v", groupID, body.Encode()), nil, http.Header{} )
+    if err != nil {
+        c.logger.Errorf("Fetching group failed: %s", err)
+        return group, err
+    }
+
+    err = json.Unmarshal(data, &group)
+    return group, err
+}
 
 
 func (c *Cx1Client) GetPresets () ([]Preset, error) {
@@ -815,6 +843,19 @@ func (c *Cx1Client) GetScan(scanID string) (Scan, error) {
 
     json.Unmarshal( []byte(data), &scan)
     return scan, nil
+}
+
+func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
+    var scanmeta ScanMetadata
+
+    data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-metadata/%v", scanID), nil, http.Header{})
+    if err != nil {
+        c.logger.Errorf("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
+        return scanmeta, errors.Wrapf(err, "failed to fetch metadata for scan with ID %v", scanID)
+    }
+
+    json.Unmarshal(data, &scanmeta)
+    return scanmeta, nil
 }
 
 // GetScans returns all scan status on the project addressed by projectID
