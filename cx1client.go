@@ -88,6 +88,15 @@ type RunningScan struct {
 	UpdatedAt time.Time
 }
 
+type ResultsPredicates struct {
+    SimilarityID string              `json:"similarityId"`
+    ProjectID   string              `json:"projectId"`
+    State       string              `json:"state"`
+    Comment     string              `json:"comment"`
+    Severity    string              `json:"severity"`
+    ScannerType string              `json:"scannerType"`
+}
+
 type Scan struct {
     ScanID   string  `json:"id"`
     Status string `json:"status"`
@@ -135,10 +144,10 @@ type ScanResultData struct {
 
 type ScanResultNodes struct {
     ID              string
-    Line            int
+    Line            uint
     Name            string
-    Column          int
-    Length          int
+    Column          uint
+    Length          uint
     Method          string
     NodeID          int
     DOMType         string
@@ -149,10 +158,10 @@ type ScanResultNodes struct {
     Definitions     string 
 }
 
-type ScanResults struct {
+type ScanResult struct {
     Type            string
     ResultID        string              `json:"id"`
-    SimilarityID    string
+    SimilarityID    int64               `json:"similarityId,string"`
     Status          string
     State           string
     Severity        string
@@ -174,6 +183,21 @@ type ScanStatusDetails struct {
     Name            string `json:"name"`
     Status          string `json:"status"`
     Details         string `json:"details"`
+}
+
+type ScanResultStatusSummary struct {
+    ToVerify        uint
+    NotExploitable  uint
+    Confirmed       uint
+    ProposedNotExploitable uint
+    Urgent          uint
+}
+
+type ScanResultSummary struct {
+    High        ScanResultStatusSummary
+    Medium      ScanResultStatusSummary
+    Low         ScanResultStatusSummary
+    Information ScanResultStatusSummary
 }
 
 type Status struct {
@@ -272,7 +296,7 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	data.Set( "refresh_token", api_key )
 
 	
-	logger.Info( "Authenticating with Cx1 at: %v", login_url )
+	logger.Infof( "Authenticating with Cx1 at: %v", login_url )
 
 	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
 	cx1_req.Header.Add( "Content-Type", "application/x-www-form-urlencoded" )
@@ -338,13 +362,12 @@ func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *ht
 
 func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
     var requestBody io.Reader
-    var requestBodyCopy io.Reader
+    var bodyBytes []byte
 
     if body != nil {
         closer := ioutil.NopCloser(body)
         bodyBytes, _ := ioutil.ReadAll(closer)
         requestBody = bytes.NewBuffer(bodyBytes)
-        requestBodyCopy = bytes.NewBuffer(bodyBytes)
         defer closer.Close()
     }
 
@@ -358,8 +381,7 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
     defer response.Body.Close()
     if err != nil || response.StatusCode >= 400 {
         resBody,_ := ioutil.ReadAll( response.Body )
-        reqBody,_ := ioutil.ReadAll( requestBodyCopy )
-        c.recordRequestDetailsInErrorCase(reqBody, resBody)
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
         if err != nil {
             c.logger.Errorf("HTTP request failed with error: %s", err)
         } else {
@@ -610,7 +632,7 @@ func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
 	return Project{}, errors.New( "No such project found" )
 }
 func (c *Cx1Client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Project, error) {
-    c.logger.Debugf("Getting projects with name %v of group %v...", projectName, groupID)
+    c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
     
     var projectResponse struct {
         TotalCount      int     `json:"totalCount"`
@@ -640,12 +662,14 @@ func (c *Cx1Client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
     }
 
     err = json.Unmarshal( data, &projectResponse)
+    c.logger.Tracef("Retrieved %d projects matching %v in group ID %v", len(projectResponse.Projects), projectName, groupID )
+
     return projectResponse.Projects, err
 }
-func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResults, error) {
+func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResult, error) {
 	c.logger.Debug( "Get Scan Results" )
     var resultResponse struct {
-        Results         []ScanResults
+        Results         []ScanResult
         TotalCount      int
     }
     
@@ -656,17 +680,88 @@ func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResults, error) {
     response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil )
     if err != nil && len(response) == 0 {
         c.logger.Errorf( "Failed to retrieve scan results for scan ID %v", scanID )
-        return []ScanResults{}, err
+        return []ScanResult{}, err
     }
 
     err = json.Unmarshal( response, &resultResponse )
     if err != nil {
         c.logger.Errorf( "Failed while parsing response: %s", err )
         c.logger.Tracef( "Response contents: %s", string(response) )
-        return []ScanResults{}, err
+        return []ScanResult{}, err
     }
     c.logger.Debugf( "Retrieved %d results", resultResponse.TotalCount )
     return resultResponse.Results, nil	
+}
+
+// results
+func (c *Cx1Client) AddResultsPredicates( predicates []ResultsPredicates ) error {
+    c.logger.Debugf( "Adding %d results predicates", len( predicates ) )
+
+    jsonBody, err := json.Marshal( predicates )
+    if err != nil {
+        c.logger.Errorf( "Failed to add results predicates: %s", err )
+        return err
+    }
+
+    _, err = c.sendRequest( http.MethodPost, "/sast-results-predicates", bytes.NewReader( jsonBody ), nil )
+    return err
+}
+
+func (r ScanResult) String() string {
+    return fmt.Sprintf( "%v (%d) - %v to %v - in file %v:%d", r.Data.QueryName, r.SimilarityID, r.Data.Nodes[0].Name, r.Data.Nodes[ len(r.Data.Nodes)-1 ].Name, r.Data.Nodes[0].FileName, r.Data.Nodes[0].Line )
+}
+
+func addResultStatus( summary *ScanResultStatusSummary, result *ScanResult ) {
+    switch result.State {
+    case "CONFIRMED":
+        summary.Confirmed++
+    case "URGENT":
+        summary.Urgent++
+    case "URGENT ":
+        summary.Urgent++
+    case "PROPOSED_NOT_EXPLOITABLE":
+        summary.ProposedNotExploitable++
+    case "NOT_EXPLOITABLE":
+        summary.NotExploitable++
+    default:
+        summary.ToVerify++
+    }
+}
+
+func (c *Cx1Client) GetScanResultSummary( results []ScanResult ) ScanResultSummary {
+    summary := ScanResultSummary{}
+
+    for _, result := range results {
+        switch result.Severity {
+        case "HIGH":
+            addResultStatus(&(summary.High), &result)
+        case "MEDIUM":
+            addResultStatus(&(summary.Medium), &result)
+        case "LOW":
+            addResultStatus(&(summary.Low), &result)
+        default:
+            addResultStatus(&(summary.Information), &result)
+        }        
+    }
+
+    return summary
+}
+
+func (s ScanResultStatusSummary) Total() uint {
+    return s.ToVerify + s.Confirmed + s.Urgent + s.ProposedNotExploitable + s.NotExploitable
+}
+func (s ScanResultStatusSummary) String() string {
+    return fmt.Sprintf( "To Verify: %d, Confirmed: %d, Urgent: %d, Proposed NE: %d, NE: %d", s.ToVerify, s.Confirmed, s.Urgent, s.ProposedNotExploitable, s.NotExploitable )
+}
+func (s ScanResultSummary) String() string {
+    return fmt.Sprintf( "%v\n%v\n%v", fmt.Sprintf( "\tHigh: %v\n\tMedium: %v\n\tLow: %v\n\tInfo: %v", s.High.String(), s.Medium.String(), s.Low.String(), s.Information.String() ),
+            fmt.Sprintf( "\tTotal High: %d, Medium: %d, Low: %d, Info: %d", s.High.Total(), s.Medium.Total(), s.Low.Total(), s.Information.Total() ),
+            fmt.Sprintf( "\tTotal ToVerify: %d, Confirmed: %d, Urgent: %d, Proposed NE: %d, NE: %d", 
+                s.High.ToVerify + s.Medium.ToVerify + s.Low.ToVerify + s.Information.ToVerify,
+                s.High.Confirmed + s.Medium.Confirmed + s.Low.Confirmed + s.Information.Confirmed,
+                s.High.Urgent + s.Medium.Urgent + s.Low.Urgent + s.Information.Urgent,
+                s.High.ProposedNotExploitable + s.Medium.ProposedNotExploitable + s.Low.ProposedNotExploitable + s.Information.ProposedNotExploitable,
+                s.High.NotExploitable + s.Medium.NotExploitable + s.Low.NotExploitable + s.Information.NotExploitable ) )
 }
 
 
@@ -712,6 +807,7 @@ func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []Proj
 
     return nil
 }
+
 
 
 func (c *Cx1Client) SetProjectBranch( projectID, branch string, allowOverride bool ) error {
@@ -779,7 +875,7 @@ func (c *Cx1Client) RequestNewReport(scanID, projectID, branch, reportType strin
             "sections": []string{
                 "ScanSummary",
                 "ExecutiveSummary",
-                "ScanResults",
+                "ScanResult",
             },
             "scanners": []string{ "SAST" },
             "host":"",
@@ -860,22 +956,54 @@ func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
 
 // GetScans returns all scan status on the project addressed by projectID
 func (c *Cx1Client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
-    scans := []Scan{}
+    var scanResponse struct {
+        TotalCount          uint
+        FilteredTotalCount  uint 
+        Scans               []Scan
+    }
+
     body := url.Values{
-        "projectId": {projectID},
-        "offset":     {fmt.Sprintf("%v",0)},
-        "limit":      {fmt.Sprintf("%v", limit)},
+        "project-id": {projectID},
+        "offset":     {fmt.Sprintf("%d",0)},
+        "limit":      {fmt.Sprintf("%d", limit)},
         "sort":        {"+created_at"},
     }
 
     data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil )
     if err != nil {
         c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
-        return scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
+        return scanResponse.Scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
     }
 
-    json.Unmarshal(data, &scans)
-    return scans, nil
+    err = json.Unmarshal(data, &scanResponse)
+    return scanResponse.Scans, err
+}
+
+// GetScans returns all scan status on the project addressed by projectID
+func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string ) ([]Scan, error) {
+    var scanResponse struct {
+        TotalCount          uint
+        FilteredTotalCount  uint 
+        Scans               []Scan
+    }
+    body := url.Values{
+        "project-id": {projectID},
+        "offset":     {fmt.Sprintf("%d",0)},
+        "limit":      {fmt.Sprintf("%d", limit)},
+        "sort":        {"+created_at"},
+        "statuses":     status,
+    }
+
+    data, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil )
+    if err != nil {
+        c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
+        return scanResponse.Scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
+    }
+
+    //c.logger.Infof( "Returned: %v", string(data) )
+
+    err = json.Unmarshal(data, &scanResponse)
+    return scanResponse.Scans, err
 }
 
 func (c *Cx1Client) scanProject( scanConfig map[string]interface{} ) (Scan, error) {
