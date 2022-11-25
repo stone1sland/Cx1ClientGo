@@ -117,11 +117,11 @@ type ScanConfiguration struct {
 type ScanMetadata struct {
     scanID          string
     ProjectID       string
-    Local           uint64
-    fileCount       uint64
+    LOC             int
+    FileCount       int
     IsIncremental   bool
     IsIncrementalCanceled bool
-    PresetName      string
+    PresetName      string `json:"queryPreset"`
 }
 
 type ScanResultData struct {
