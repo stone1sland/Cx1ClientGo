@@ -200,6 +200,44 @@ type ScanResultSummary struct {
     Information ScanResultStatusSummary
 }
 
+// Very simplified for now
+type ScanSummary struct {
+    TenantID            string
+    ScanID              string
+    SASTCounters        struct {
+        //QueriesCounters           []?
+        //SinkFileCounters          []?
+        LanguageCounters    []struct{
+            Language        string
+            Counter         uint
+        }
+        ComplianceCounters  []struct{
+            Compliance      string
+            Counter         uint
+        }
+        SeverityCounters    []struct{
+            Severity        string
+            Counter         uint
+        }
+        StatusCounters      []struct{
+            Status          string
+            Counter         uint
+        }
+        StateCounters       []struct{
+            State           string
+            Counter         uint
+        }
+        TotalCounter        uint
+        FilesScannedCounter uint
+    }
+    // ignoring the other counters
+    // KICSCounters
+    // SCACounters
+    // SCAPackagesCounters
+    // SCAContainerCounters
+    // APISecCounters
+}
+
 type Status struct {
     ID      int                 `json:"id"`
     Name    string              `json:"name"`
@@ -364,6 +402,8 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
     var requestBody io.Reader
     var bodyBytes []byte
 
+    c.logger.Debugf( "Sending request to URL %v", url )
+
     if body != nil {
         closer := ioutil.NopCloser(body)
         bodyBytes, _ := ioutil.ReadAll(closer)
@@ -378,26 +418,31 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
     }
 
     response, err := c.httpClient.Do(request)
-    defer response.Body.Close()
-    if err != nil || response.StatusCode >= 400 {
+    if err != nil {
         resBody,_ := ioutil.ReadAll( response.Body )
         c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-        if err != nil {
-            c.logger.Errorf("HTTP request failed with error: %s", err)
-        } else {
-            c.logger.Errorf("HTTP request returned code: %s", response.Status)
-        }
+        c.logger.Errorf("HTTP request failed with error: %s", err)
         return resBody, err
+    }
+    if response.StatusCode >= 400 {
+        resBody,_ := ioutil.ReadAll( response.Body )
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+        c.logger.Errorf("HTTP response indicates error: %v", response.Status )
+        return resBody, errors.New( "HTTP Response: " + response.Status )
     }
     
     resBody,err := ioutil.ReadAll( response.Body )
 
 	if err != nil {
-		c.logger.Errorf( "Error reading response body: %s", err )
+        if err.Error() == "remote error: tls: user canceled" {
+            c.logger.Warnf( "HTTP request encountered error: %s", err )
+        } else {
+            c.logger.Errorf( "Error reading response body: %s", err )
+        }
         c.logger.Tracef( "Parsed: %v", string(resBody) )
 	}
 
-    return resBody, err
+    return resBody, nil
 }
 
 // internal calls
@@ -479,7 +524,7 @@ func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 }
 
 func (c *Cx1Client) GetGroups () ([]Group, error) {
-	c.logger.Debug( "Get Groups" )
+	c.logger.Debug( "Get Cx1 Groups" )
     var Groups []Group
 	
     response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/groups?briefRepresentation=true", nil, nil )
@@ -493,7 +538,7 @@ func (c *Cx1Client) GetGroups () ([]Group, error) {
 }
 
 func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
-	c.logger.Debugf( "Get Group by name: %v", groupname )
+	c.logger.Debugf( "Get Cx1 Group by name: %v", groupname )
     response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf( "/groups?briefRepresentation=true&search=%v", url.QueryEscape(groupname)), nil, nil )
     if err != nil {
         return Group{}, err
@@ -538,7 +583,7 @@ func (c *Cx1Client) GetGroupByID( groupID string ) (Group, error) {
 
 
 func (c *Cx1Client) GetPresets () ([]Preset, error) {
-	c.logger.Debug( "Get Presets" )
+	c.logger.Debug( "Get Cx1 Presets" )
     var Presets []Preset
     response, err := c.sendRequest( http.MethodGet, "/queries/presets", nil, nil )
     if err != nil {
@@ -581,8 +626,23 @@ func (c *Cx1Client) CreateProject ( projectname string, cx1_group_id string, tag
 	return project, err
 }
 
+func (p *Project) String() string {
+    return fmt.Sprintf( "[%v] %v (%v)", p.ProjectID, p.Name, p.GetTags() )
+}
+func (p *Project) GetTags() string {
+    str := ""
+    for key, val := range p.Tags {
+        if str == "" {
+            str = key + " = " + val
+        } else {
+            str = str + ", " + key + " = " + val
+        }
+    }
+    return str
+}
+
 func (c *Cx1Client) GetProjects () ([]Project, error) {
-	c.logger.Debug( "Get Projects" )
+	c.logger.Debug( "Get Cx1 Projects" )
     var Projects []Project
 	
     response, err := c.sendRequest( http.MethodGet, "/projects/", nil, nil )
@@ -608,7 +668,7 @@ func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
     return project, err
 }
 func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
-	c.logger.Debugf( "Get Project By Name: %v", projectname )
+	c.logger.Debugf( "Get Cx1 Project By Name: %v", projectname )
     response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/projects?name=%v", url.QueryEscape(projectname)), nil, nil )
     if err != nil {
         return Project{}, err
@@ -666,8 +726,9 @@ func (c *Cx1Client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
 
     return projectResponse.Projects, err
 }
-func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResult, error) {
-	c.logger.Debug( "Get Scan Results" )
+
+func (c *Cx1Client) GetScanResults (scanID string, limit uint) ([]ScanResult, error) {
+	c.logger.Debug( "Get Cx1 Scan Results" )
     var resultResponse struct {
         Results         []ScanResult
         TotalCount      int
@@ -675,6 +736,7 @@ func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResult, error) {
     
     params := url.Values{
         "scan-id":   {scanID},
+        "limit":    {fmt.Sprintf( "%d", limit )},
     }
     	
     response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil )
@@ -690,6 +752,11 @@ func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResult, error) {
         return []ScanResult{}, err
     }
     c.logger.Debugf( "Retrieved %d results", resultResponse.TotalCount )
+
+    if len(resultResponse.Results) != resultResponse.TotalCount {
+        c.logger.Warnf( "Expected results total count %d but parsed only %d", resultResponse.TotalCount, len( resultResponse.Results ) )
+    }
+
     return resultResponse.Results, nil	
 }
 
@@ -852,7 +919,7 @@ func (c *Cx1Client) SetProjectFileFilter( projectID, filter string, allowOverrid
 
 
 func (c *Cx1Client) GetQueries () ([]Query, error) {
-	c.logger.Debug( "Get Queries" )
+	c.logger.Debug( "Get Cx1 Queries" )
     var Queries []Query
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
@@ -952,6 +1019,42 @@ func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
 
     json.Unmarshal(data, &scanmeta)
     return scanmeta, nil
+}
+
+func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
+    var ScansSummaries struct {
+        ScanSum []ScanSummary               `json:"scansSummaries"`
+        TotalCount  uint
+    }
+
+    params := url.Values {
+        "scan-ids" : {scanID},
+        "include-queries": {"false"},
+        "include-status-counters" : {"true"},
+        "include-files": {"false"},
+    }
+
+    data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scan-summary/?%v", params.Encode() ), nil, http.Header{})
+    if err != nil {
+        c.logger.Errorf("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
+        return ScanSummary{}, errors.Wrapf(err, "failed to fetch metadata for scan with ID %v", scanID)
+    }
+
+    err = json.Unmarshal(data, &ScansSummaries)
+
+    if err != nil {
+        return ScanSummary{}, err
+    }
+    if ScansSummaries.TotalCount == 0 {
+        return ScanSummary{}, errors.New( fmt.Sprintf( "Failed to retrieve scan summary for scan ID %v", scanID ) )
+    }
+
+    if len(ScansSummaries.ScanSum) == 0 {
+        c.logger.Errorf( "Failed to parse data, 0-len ScanSum.\n%v", string(data) )
+        return ScanSummary{}, errors.New( "Fail" )
+    }
+
+    return ScansSummaries.ScanSum[0], nil
 }
 
 // GetScans returns all scan status on the project addressed by projectID
@@ -1087,7 +1190,7 @@ func (s *Scan) IsIncremental() (bool, error) {
 
 
 func (c *Cx1Client) GetUploadURL () (string,error) {
-	c.logger.Debug( "Get Upload URL" )
+	c.logger.Debug( "Get Cx1 Upload URL" )
 	response, err := c.sendRequest( http.MethodPost, "/uploads", nil, nil )
 
     if err != nil {
@@ -1111,7 +1214,7 @@ func (c *Cx1Client) GetUploadURL () (string,error) {
 
 
 func (c *Cx1Client) GetUsers () ([]User, error) {
-	c.logger.Debug( "Get Users" )
+	c.logger.Debug( "Get Cx1 Users" )
 
     var Users []User
     // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
@@ -1190,27 +1293,17 @@ func (c *Cx1Client) parseProjects( input []byte ) ([]Project, error) {
 	var projectResponse struct {
         TotalCount int
         filteredTotalCount int
-        Projects []interface{}
+        Projects []Project
     }
-    var projectList []Project
 
 	err := json.Unmarshal( []byte( input ), &projectResponse )
 	if err != nil {
 		c.logger.Errorf("Error: %s", err )
 		c.logger.Tracef( "Input was: %v", string(input) )
-		return projectList, err
+		return projectResponse.Projects, err
 	}
 
-	projects := projectResponse.Projects
-
-	projectList = make([]Project, len(projects) )
-	for id := range projects {
-		projectList[id].ProjectID = projects[id].(map[string]interface{})["id"].(string)
-		projectList[id].Name = projects[id].(map[string]interface{})["name"].(string)
-	}
-	
-
-	return projectList, nil
+	return projectResponse.Projects, nil
 }
 
 func (c *Cx1Client) parseRunningScans( input []byte ) ([]RunningScan,error) {
