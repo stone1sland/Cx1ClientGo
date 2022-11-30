@@ -126,8 +126,8 @@ type ScanConfiguration struct {
 type ScanMetadata struct {
     scanID          string
     ProjectID       string
-    LOC             int
-    FileCount       int
+    LOC             uint64
+    FileCount       uint64
     IsIncremental   bool
     IsIncrementalCanceled bool
     PresetName      string `json:"queryPreset"`
@@ -144,17 +144,17 @@ type ScanResultData struct {
 
 type ScanResultNodes struct {
     ID              string
-    Line            uint
+    Line            uint64
     Name            string
-    Column          uint
-    Length          uint
+    Column          uint64
+    Length          uint64
     Method          string
-    NodeID          int
+    NodeID          uint64
     DOMType         string
     FileName        string
     FullName        string
     TypeName        string
-    MethodLine      int
+    MethodLine      uint64
     Definitions     string 
 }
 
@@ -186,11 +186,11 @@ type ScanStatusDetails struct {
 }
 
 type ScanResultStatusSummary struct {
-    ToVerify        uint
-    NotExploitable  uint
-    Confirmed       uint
-    ProposedNotExploitable uint
-    Urgent          uint
+    ToVerify        uint64
+    NotExploitable  uint64
+    Confirmed       uint64
+    ProposedNotExploitable uint64
+    Urgent          uint64
 }
 
 type ScanResultSummary struct {
@@ -209,26 +209,26 @@ type ScanSummary struct {
         //SinkFileCounters          []?
         LanguageCounters    []struct{
             Language        string
-            Counter         uint
+            Counter         uint64
         }
         ComplianceCounters  []struct{
             Compliance      string
-            Counter         uint
+            Counter         uint64
         }
         SeverityCounters    []struct{
             Severity        string
-            Counter         uint
+            Counter         uint64
         }
         StatusCounters      []struct{
             Status          string
-            Counter         uint
+            Counter         uint64
         }
         StateCounters       []struct{
             State           string
-            Counter         uint
+            Counter         uint64
         }
-        TotalCounter        uint
-        FilesScannedCounter uint
+        TotalCounter        uint64
+        FilesScannedCounter uint64
     }
     // ignoring the other counters
     // KICSCounters
@@ -245,10 +245,11 @@ type Status struct {
 }
 
 type User struct {
-	UserID string
+	UserID string               `json:"id"`
 	FirstName string
 	LastName string
 	UserName string
+    Email   string
 }
 
 type WorkflowLog struct {
@@ -456,6 +457,12 @@ func (c *Cx1Client) sendRequestIAM(method, base, url string, body io.Reader, hea
     return c.sendRequestInternal(method, iamurl, body, header)
 }
 
+// not sure what to call this one? used for /console/ calls, not part of the /realms/ path
+func (c *Cx1Client) sendRequestOther(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
+    iamurl := fmt.Sprintf("%v%v/%v%v", c.iamUrl, base, c.tenant, url)
+    return c.sendRequestInternal(method, iamurl, body, header)
+}
+
 func (c *Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte ) {
     if len(requestBody) != 0 {
         c.logger.Errorf("Request body: %s", string(requestBody) )
@@ -525,16 +532,16 @@ func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 
 func (c *Cx1Client) GetGroups () ([]Group, error) {
 	c.logger.Debug( "Get Cx1 Groups" )
-    var Groups []Group
+    var groups []Group
 	
     response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/groups?briefRepresentation=true", nil, nil )
     if err != nil {
-        return Groups, err
+        return groups, err
     }
 
-    Groups, err = c.parseGroups( response )
-    c.logger.Tracef( "Got %d groups", len(Groups) )
-    return Groups, err
+    err = json.Unmarshal( response, &groups )
+    c.logger.Tracef( "Got %d groups", len(groups) )
+    return groups, err
 }
 
 func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
@@ -543,7 +550,8 @@ func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
     if err != nil {
         return Group{}, err
     }
-	groups, err := c.parseGroups( response )
+    var groups []Group
+	err = json.Unmarshal( response, &groups )
 	
     if err != nil {
         c.logger.Errorf( "Error retrieving group: %s", err )
@@ -582,17 +590,23 @@ func (c *Cx1Client) GetGroupByID( groupID string ) (Group, error) {
 }
 
 
+// Presets
+
+func (p *Preset) String() string {
+    return fmt.Sprintf( "[%d] %v", p.PresetID, p.Name )
+}
+
 func (c *Cx1Client) GetPresets () ([]Preset, error) {
 	c.logger.Debug( "Get Cx1 Presets" )
-    var Presets []Preset
+    var presets []Preset
     response, err := c.sendRequest( http.MethodGet, "/queries/presets", nil, nil )
     if err != nil {
-        return Presets, err
+        return presets, err
     }
 
-    Presets, err = c.parsePresets( response )
-    c.logger.Tracef( "Got %d presets", len(Presets) )
-    return Presets, err
+    err = json.Unmarshal( response, &presets )
+    c.logger.Tracef( "Got %d presets", len(presets) )
+    return presets, err
 }
 
 
@@ -643,18 +657,22 @@ func (p *Project) GetTags() string {
 
 func (c *Cx1Client) GetProjects () ([]Project, error) {
 	c.logger.Debug( "Get Cx1 Projects" )
-    var Projects []Project
+    var ProjectResponse struct {
+        TotalCount          uint64
+        FilteredCount       uint64
+        Projects            []Project
+    }
 	
     response, err := c.sendRequest( http.MethodGet, "/projects/", nil, nil )
     if err != nil {
-        return Projects, err
+        return ProjectResponse.Projects, err
     }
 
-    Projects, err = c.parseProjects( response )
-    c.logger.Tracef( "Retrieved %d projects",  len(Projects) )
-    return Projects, err
-	
+    err = json.Unmarshal( response, &ProjectResponse )
+    c.logger.Tracef( "Retrieved %d projects",  len(ProjectResponse.Projects) )
+    return ProjectResponse.Projects, err	
 }
+
 func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
     c.logger.Debugf("Getting Project with ID %v...", projectID)
     var project Project
@@ -673,8 +691,8 @@ func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
     if err != nil {
         return Project{}, err
     }
-
-	projects, err := c.parseProjects( response )
+    var projects []Project
+	err = json.Unmarshal( response, &projects )
     if err != nil {
         c.logger.Errorf( "Error getting project: %s", err )
         return Project{}, err
@@ -727,7 +745,7 @@ func (c *Cx1Client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
     return projectResponse.Projects, err
 }
 
-func (c *Cx1Client) GetScanResults (scanID string, limit uint) ([]ScanResult, error) {
+func (c *Cx1Client) GetScanResults (scanID string, limit uint64) ([]ScanResult, error) {
 	c.logger.Debug( "Get Cx1 Scan Results" )
     var resultResponse struct {
         Results         []ScanResult
@@ -814,7 +832,7 @@ func (c *Cx1Client) GetScanResultSummary( results []ScanResult ) ScanResultSumma
     return summary
 }
 
-func (s ScanResultStatusSummary) Total() uint {
+func (s ScanResultStatusSummary) Total() uint64 {
     return s.ToVerify + s.Confirmed + s.Urgent + s.ProposedNotExploitable + s.NotExploitable
 }
 func (s ScanResultStatusSummary) String() string {
@@ -1024,7 +1042,7 @@ func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
 func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
     var ScansSummaries struct {
         ScanSum []ScanSummary               `json:"scansSummaries"`
-        TotalCount  uint
+        TotalCount  uint64
     }
 
     params := url.Values {
@@ -1060,8 +1078,8 @@ func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
 // GetScans returns all scan status on the project addressed by projectID
 func (c *Cx1Client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
     var scanResponse struct {
-        TotalCount          uint
-        FilteredTotalCount  uint 
+        TotalCount          uint64
+        FilteredTotalCount  uint64 
         Scans               []Scan
     }
 
@@ -1085,8 +1103,8 @@ func (c *Cx1Client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
 // GetScans returns all scan status on the project addressed by projectID
 func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string ) ([]Scan, error) {
     var scanResponse struct {
-        TotalCount          uint
-        FilteredTotalCount  uint 
+        TotalCount          uint64
+        FilteredTotalCount  uint64 
         Scans               []Scan
     }
     body := url.Values{
@@ -1211,31 +1229,81 @@ func (c *Cx1Client) GetUploadURL () (string,error) {
 }
 
 
+func (c *Cx1Client) GetCurrentUser() (User, error) {
+    var whoami struct {
+        UserID      string
+    }
+    var user User
 
+    response, err := c.sendRequestOther( http.MethodGet, "/auth/admin", "/console/whoami", nil, nil )
+    if err != nil {
+        return user, err
+    }
+
+    err = json.Unmarshal( response, &whoami )
+    if err != nil {
+        return user, err
+    }
+
+    return c.GetUserByID( whoami.UserID )    
+}
+
+func (u *User) String() string {
+    return fmt.Sprintf( "[%v] %v %v (%v)", shortenGUID(u.UserID), u.FirstName, u.LastName, u.Email )
+}
 
 func (c *Cx1Client) GetUsers () ([]User, error) {
 	c.logger.Debug( "Get Cx1 Users" )
 
-    var Users []User
+    var users []User
     // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
     response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/users?briefRepresentation=true", nil, nil )
     if err != nil {
-        return Users, err
+        return users, err
     }
 
-    Users, err = c.parseUsers( response )
-    c.logger.Tracef( "Got %d users", len(Users) )
-    return Users, err 
+    err = json.Unmarshal( response, &users )
+    c.logger.Tracef( "Got %d users", len(users) )
+    return users, err 
+}
+
+func (c *Cx1Client) GetUserByID (userID string) (User, error) {
+	c.logger.Debug( "Get Cx1 User by ID" )
+
+
+    var user User
+    // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf("/users/%v?briefRepresentation=true", userID), nil, nil )
+    if err != nil {
+        return user, err
+    }
+
+    err = json.Unmarshal( response, &user )
+    return user, err 
 }
 
 
 
-func (c *Cx1Client) ToString() string {
-	return fmt.Sprintf( "%v on %v with token: %v...%v", c.tenant, c.baseUrl, c.authToken[:4], c.authToken[len(c.authToken)-4:] )
+func (c *Cx1Client) String() string {
+	return fmt.Sprintf( "%v on %v with token: %v", c.tenant, c.baseUrl, shortenGUID(c.authToken)  )
 }
 
 
+func (c *Cx1Client) ProjectLink( p *Project ) string {
+    return fmt.Sprintf( "%v/projects/%v/overview", c.baseUrl, p.ProjectID )
+}
+func (c *Cx1Client) PresetLink( p *Preset ) string {
+    return fmt.Sprintf( "%v/resourceManagement/presets?presetId=%d", c.baseUrl, p.PresetID )
+}
+func (c *Cx1Client) UserLink( u *User ) string {
+    return fmt.Sprintf( "%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID )
+}
 
+func shortenGUID( guid string ) string {
+    return fmt.Sprintf( "%v..%v", guid[:2], guid[len(guid)-2:] )
+}
+
+/*
 // internal data-parsing
 
 func (c *Cx1Client) parseGroups( input []byte ) ([]Group, error) {
@@ -1394,3 +1462,4 @@ func (c *Cx1Client) parseUserFromInterface( input *map[string]interface{} ) (Use
 	return user, nil
 }
 
+*/
