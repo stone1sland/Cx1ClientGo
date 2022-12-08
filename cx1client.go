@@ -31,7 +31,7 @@ type Cx1Client struct {
 }
 
 type Group struct {
-	GroupID string
+	GroupID string          `json:"id"`
 	Name string
 //	Path string // ignoring for now
 //  SubGroups string // ignoring for now
@@ -39,8 +39,8 @@ type Group struct {
 
 
 type Preset struct {
-	PresetID int        `yaml:"id"`
-	Name string         `yaml:"name"`
+	PresetID uint64        `json:"id"`
+	Name string         `json:"name"`
 }
 
 
@@ -55,7 +55,7 @@ type Project struct {
     RepoUrl             string              `json:"repoUrl"`
     MainBranch          string              `json:"mainBranch"`
     Origin              string              `json:"origin"`
-    Criticality         int                 `json:"criticality"`
+    Criticality         uint                `json:"criticality"`
 }
 
 type ProjectConfigurationSetting struct {
@@ -95,6 +95,19 @@ type ResultsPredicates struct {
     Comment     string              `json:"comment"`
     Severity    string              `json:"severity"`
     ScannerType string              `json:"scannerType"`
+}
+
+type KeyCloakClient struct {
+    ClientID    string              `json:"id"`
+    Name        string              `json:"clientId"`
+    Enabled     bool
+}
+type Role struct {
+    RoleID      string              `json:"id"`
+    Name        string
+    Description string
+    Composite   bool
+    ClientRole  bool
 }
 
 type Scan struct {
@@ -318,7 +331,12 @@ func getTokenOIDC( client *http.Client, iam_url string, tenant string, client_id
 	err = json.Unmarshal(resBody, &jsonBody)
 
 	if ( err == nil ) {
-		return jsonBody["access_token"].(string), nil
+        if jsonBody["access_token"] == nil {
+            logger.Errorf( "Response does not contain access token: %v", string(resBody) )
+            return "", errors.New( "Response does not contain access token" )
+        } else {
+		    return jsonBody["access_token"].(string), nil
+        }
 	} else {
 		logger.Errorf( "Error parsing response: %s", err )
 		logger.Tracef( "Input was: %s", string(resBody) )
@@ -363,7 +381,12 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	err = json.Unmarshal(resBody, &jsonBody)
 
 	if ( err == nil ) {
-		return jsonBody["access_token"].(string), nil
+        if jsonBody["access_token"] == nil {
+            logger.Errorf( "Response does not contain access token: %v", string(resBody) )
+            return "", errors.New( "Response does not contain access token" )
+        } else {
+		    return jsonBody["access_token"].(string), nil
+        }
 	} else {
 		logger.Errorf( "Error parsing response: %s", err )
 		logger.Tracef( "Input was: %v", string(resBody) )
@@ -437,6 +460,7 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 	if err != nil {
         if err.Error() == "remote error: tls: user canceled" {
             c.logger.Warnf( "HTTP request encountered error: %s", err )
+            return resBody, nil
         } else {
             c.logger.Errorf( "Error reading response body: %s", err )
         }
@@ -511,6 +535,10 @@ func (c Cx1Client) PutFile( URL string, filename string ) (string,error) {
 
 
 // Groups
+func (g *Group) String() string {
+    return fmt.Sprintf( "[%v] %v", shortenGUID( g.GroupID ), g.Name )
+}
+
 func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 	c.logger.Debugf( "Create Group: %v ", groupname  )
 	data := map[string]interface{} {
@@ -691,18 +719,24 @@ func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
     if err != nil {
         return Project{}, err
     }
-    var projects []Project
-	err = json.Unmarshal( response, &projects )
+    var ProjectResponse struct {
+        TotalCount          uint64
+        FilteredCount       uint64
+        Projects            []Project
+    }
+
+	err = json.Unmarshal( response, &ProjectResponse )
     if err != nil {
         c.logger.Errorf( "Error getting project: %s", err )
+        c.logger.Tracef( "Failed to unmarshal: %v", string(response) )
         return Project{}, err
     }
 
-	c.logger.Tracef( "Retrieved %d projects", len(projects) ) 
+	c.logger.Tracef( "Retrieved %d projects", len(ProjectResponse.Projects) ) 
 
-	for i := range projects {
-		if projects[i].Name == projectname {
-			match := projects[i]
+	for i := range ProjectResponse.Projects {
+		if ProjectResponse.Projects[i].Name == projectname {
+			match := ProjectResponse.Projects[i]
 			return match, nil
 		}
 	}
@@ -755,6 +789,9 @@ func (c *Cx1Client) GetScanResults (scanID string, limit uint64) ([]ScanResult, 
     params := url.Values{
         "scan-id":   {scanID},
         "limit":    {fmt.Sprintf( "%d", limit )},
+        "state":    []string{},
+        "severity": []string{},
+        "status":   []string{},
     }
     	
     response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil )
@@ -773,6 +810,7 @@ func (c *Cx1Client) GetScanResults (scanID string, limit uint64) ([]ScanResult, 
 
     if len(resultResponse.Results) != resultResponse.TotalCount {
         c.logger.Warnf( "Expected results total count %d but parsed only %d", resultResponse.TotalCount, len( resultResponse.Results ) )
+        c.logger.Warnf( "Response was: %v", string(response) )
     }
 
     return resultResponse.Results, nil	
@@ -1039,6 +1077,17 @@ func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
     return scanmeta, nil
 }
 
+func (s *ScanSummary) TotalCount() uint64 {
+    var count uint64
+    count = 0
+
+    for _, c := range s.SASTCounters.StateCounters{
+        count += c.Counter
+    }
+
+    return count
+}
+
 func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
     var ScansSummaries struct {
         ScanSum []ScanSummary               `json:"scansSummaries"`
@@ -1205,7 +1254,25 @@ func (s *Scan) IsIncremental() (bool, error) {
     return false, errors.New( fmt.Sprintf("Scan %v did not have a sast-engine incremental flag set", s.ScanID) )
 }
 
-
+// convenience
+func (c *Cx1Client) ScanPolling( s *Scan ) (Scan, error) {
+	c.logger.Infof( "Polling status of scan %v", s.ScanID )
+    var err error
+    scan := *s
+	for scan.Status == "Running" {
+		time.Sleep( 10 * time.Second )
+		scan, err = c.GetScan( scan.ScanID )
+		if err != nil {
+			c.logger.Errorf( "Failed to get scan status: %v", err )
+			return scan, err
+		}
+		c.logger.Infof( " - %v", scan.Status )
+        if scan.Status != "Running" {
+            break
+        }
+	}
+    return scan, nil
+}
 
 func (c *Cx1Client) GetUploadURL () (string,error) {
 	c.logger.Debug( "Get Cx1 Upload URL" )
@@ -1282,6 +1349,99 @@ func (c *Cx1Client) GetUserByID (userID string) (User, error) {
     return user, err 
 }
 
+// Roles and Clients
+func (c *Cx1Client) GetClients() ([]KeyCloakClient, error) {
+    c.logger.Debug( "Getting KeyCloak Clients" )
+    var clients []KeyCloakClient
+
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/clients?briefRepresentation=true", nil, nil )
+    if err != nil {
+        return clients, err
+    }
+
+    err = json.Unmarshal( response, &clients )
+    c.logger.Tracef( "Got %d clients", len(clients) )
+    return clients, err
+}
+
+func (c *Cx1Client) GetClientByName( clientName string ) (KeyCloakClient, error) {
+    c.logger.Debugf( "Getting KeyCloak client with name %v", clientName )
+
+    var client KeyCloakClient
+    clients, err := c.GetClients()
+    if err != nil {
+        return client, err
+    }
+
+    for _, c := range clients {
+        if c.Name == clientName {
+            client = c
+            return client, nil
+        }
+    }
+
+    return client, errors.New( "No such client found" )
+}
+
+func (r *Role) String() string {
+    return fmt.Sprintf( "[%v] %v", shortenGUID( r.RoleID ), r.Name )
+}
+
+func (c *Cx1Client) GetKeyCloakRoles() ([]Role, error) {
+    c.logger.Debugf( "Getting KeyCloak Roles" )
+    var roles []Role
+
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/roles?briefRepresentation=true", nil, nil )
+    if err != nil {
+        return roles, err
+    }
+
+    err = json.Unmarshal( response, &roles )
+    c.logger.Tracef( "Got %d roles", len(roles) )
+    return roles, err
+}
+
+func (c *Cx1Client) GetRolesByClient(clientId string) ([]Role, error) {
+    c.logger.Debugf( "Getting KeyCloak Roles for client %v", clientId )
+    var roles []Role
+
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", fmt.Sprintf( "/clients/%v/roles?briefRepresentation=true", clientId ), nil, nil )
+    if err != nil {
+        return roles, err
+    }
+
+    err = json.Unmarshal( response, &roles )
+    c.logger.Tracef( "Got %d roles", len(roles) )
+    return roles, err
+}
+
+// convenience function
+func (c *Cx1Client) GetASTRoles() ([]Role, error) {
+    c.logger.Debug( "Getting roles set for ast-app client" )
+    client, err := c.GetClientByName( "ast-app" )
+    if err != nil {
+        return []Role{}, err
+    }
+
+    return c.GetRolesByClient( client.ClientID )
+}
+
+// convenience function to get both KeyCloak (system) roles plus the AST-APP-specific roles
+func (c *Cx1Client) GetCombinedRoles() ([]Role, error) {
+    c.logger.Debug( "Getting System (KeyCloak) and Application (AST-APP) roles" )
+    ast_roles, err := c.GetASTRoles()
+    if err != nil {
+        return ast_roles, err
+    }
+    system_roles, err := c.GetKeyCloakRoles()
+    if err != nil {
+        return ast_roles, err
+    }
+
+    ast_roles = append( ast_roles, system_roles... )
+    return ast_roles, nil
+}
+
 
 
 func (c *Cx1Client) String() string {
@@ -1297,6 +1457,14 @@ func (c *Cx1Client) PresetLink( p *Preset ) string {
 }
 func (c *Cx1Client) UserLink( u *User ) string {
     return fmt.Sprintf( "%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID )
+}
+func (c *Cx1Client) RoleLink( r *Role ) string {
+    return fmt.Sprintf( "%v/auth/admin/%v/console/#/realms/%v/roles/%v", c.iamUrl, c.tenant, c.tenant, r.RoleID )
+}
+
+//https://deu.iam.checkmarx.net/auth/admin/cx_tam_appsec_canary_michael_kubiaczyk/console/#/realms/cx_tam_appsec_canary_michael_kubiaczyk/groups/cb35c486-7a32-4b9d-8ffb-8d4343fd56fa
+func (c *Cx1Client) GroupLink( g *Group ) string {
+    return fmt.Sprintf( "%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID )
 }
 
 func shortenGUID( guid string ) string {
