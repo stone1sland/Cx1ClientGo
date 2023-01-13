@@ -10,6 +10,7 @@ import (
 	"strings"
 	"encoding/json"
 	"bytes"
+    "strconv"
     "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -31,7 +32,7 @@ type Cx1Client struct {
 }
 
 type Group struct {
-	GroupID string
+	GroupID string          `json:"id"`
 	Name string
 //	Path string // ignoring for now
 //  SubGroups string // ignoring for now
@@ -39,8 +40,10 @@ type Group struct {
 
 
 type Preset struct {
-	PresetID int        `yaml:"id"`
-	Name string         `yaml:"name"`
+	PresetID            uint64        `json:"id"`
+	Name                string         `json:"name"`
+    Filled              bool
+    Queries             []Query       
 }
 
 
@@ -55,7 +58,7 @@ type Project struct {
     RepoUrl             string              `json:"repoUrl"`
     MainBranch          string              `json:"mainBranch"`
     Origin              string              `json:"origin"`
-    Criticality         int                 `json:"criticality"`
+    Criticality         uint                `json:"criticality"`
 }
 
 type ProjectConfigurationSetting struct {
@@ -70,8 +73,20 @@ type ProjectConfigurationSetting struct {
 }
 
 type Query struct {
-	QueryID uint64
-	Name string
+	QueryID             uint64      `json:"queryID,string"`
+	Name                string      `json:"queryName"`
+    Group               string
+    Language            string
+    Severity            string
+    CweID               int64    
+    QueryDescriptionId  int64
+    Custom              bool
+}
+
+type QueryGroup struct {
+    Name                string
+    Language            string
+    Queries             []*Query
 }
 
 type ReportStatus struct {
@@ -89,12 +104,33 @@ type RunningScan struct {
 }
 
 type ResultsPredicates struct {
-    SimilarityID string              `json:"similarityId"`
+    PredicateID string              `json:"ID"`
+    SimilarityID int64              `json:"similarityId,string"`
     ProjectID   string              `json:"projectId"`
     State       string              `json:"state"`
     Comment     string              `json:"comment"`
     Severity    string              `json:"severity"`
-    ScannerType string              `json:"scannerType"`
+    CreatedBy   string
+    CreatedAt   string 
+}
+
+type KeyCloakClient struct {
+    ClientID    string              `json:"id"`
+    Name        string              `json:"clientId"`
+    Enabled     bool
+}
+type Role struct {
+    RoleID      string              `json:"id"`
+    Name        string
+    Description string
+    Attributes  struct {
+        Creator     []string
+        Type        []string
+        Category    []string
+        LastUpdate  []string // it is returned as [ "uint",... ]            
+    }
+    Composite   bool
+    ClientRole  bool
 }
 
 type Scan struct {
@@ -126,8 +162,8 @@ type ScanConfiguration struct {
 type ScanMetadata struct {
     scanID          string
     ProjectID       string
-    LOC             int
-    FileCount       int
+    LOC             uint64
+    FileCount       uint64
     IsIncremental   bool
     IsIncrementalCanceled bool
     PresetName      string `json:"queryPreset"`
@@ -144,17 +180,17 @@ type ScanResultData struct {
 
 type ScanResultNodes struct {
     ID              string
-    Line            uint
+    Line            uint64
     Name            string
-    Column          uint
-    Length          uint
+    Column          uint64
+    Length          uint64
     Method          string
-    NodeID          int
+    NodeID          uint64
     DOMType         string
     FileName        string
     FullName        string
     TypeName        string
-    MethodLine      int
+    MethodLine      uint64
     Definitions     string 
 }
 
@@ -186,11 +222,11 @@ type ScanStatusDetails struct {
 }
 
 type ScanResultStatusSummary struct {
-    ToVerify        uint
-    NotExploitable  uint
-    Confirmed       uint
-    ProposedNotExploitable uint
-    Urgent          uint
+    ToVerify        uint64
+    NotExploitable  uint64
+    Confirmed       uint64
+    ProposedNotExploitable uint64
+    Urgent          uint64
 }
 
 type ScanResultSummary struct {
@@ -200,6 +236,44 @@ type ScanResultSummary struct {
     Information ScanResultStatusSummary
 }
 
+// Very simplified for now
+type ScanSummary struct {
+    TenantID            string
+    ScanID              string
+    SASTCounters        struct {
+        //QueriesCounters           []?
+        //SinkFileCounters          []?
+        LanguageCounters    []struct{
+            Language        string
+            Counter         uint64
+        }
+        ComplianceCounters  []struct{
+            Compliance      string
+            Counter         uint64
+        }
+        SeverityCounters    []struct{
+            Severity        string
+            Counter         uint64
+        }
+        StatusCounters      []struct{
+            Status          string
+            Counter         uint64
+        }
+        StateCounters       []struct{
+            State           string
+            Counter         uint64
+        }
+        TotalCounter        uint64
+        FilesScannedCounter uint64
+    }
+    // ignoring the other counters
+    // KICSCounters
+    // SCACounters
+    // SCAPackagesCounters
+    // SCAContainerCounters
+    // APISecCounters
+}
+
 type Status struct {
     ID      int                 `json:"id"`
     Name    string              `json:"name"`
@@ -207,10 +281,13 @@ type Status struct {
 }
 
 type User struct {
-	UserID string
-	FirstName string
-	LastName string
-	UserName string
+    Enabled bool                `json:"enabled"`
+	UserID string               `json:"id,omitempty"`
+	FirstName string            `json:"firstName"`
+	LastName string             `json:"lastName"`  
+	UserName string             `json:"username"`
+    Email   string              `json:"email"`
+    Groups  []string            `json:"groups"`
 }
 
 type WorkflowLog struct {
@@ -219,6 +296,7 @@ type WorkflowLog struct {
     Timestamp           string              `json:"Timestamp"`
 }
 
+var astAppID string
 
 // Main entry for users of this client:
 func NewOAuthClient( client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger ) (*Cx1Client, error) {
@@ -279,7 +357,12 @@ func getTokenOIDC( client *http.Client, iam_url string, tenant string, client_id
 	err = json.Unmarshal(resBody, &jsonBody)
 
 	if ( err == nil ) {
-		return jsonBody["access_token"].(string), nil
+        if jsonBody["access_token"] == nil {
+            logger.Errorf( "Response does not contain access token: %v", string(resBody) )
+            return "", errors.New( "Response does not contain access token" )
+        } else {
+		    return jsonBody["access_token"].(string), nil
+        }
 	} else {
 		logger.Errorf( "Error parsing response: %s", err )
 		logger.Tracef( "Input was: %s", string(resBody) )
@@ -324,7 +407,12 @@ func getTokenAPIKey( client *http.Client, iam_url string, tenant string, api_key
 	err = json.Unmarshal(resBody, &jsonBody)
 
 	if ( err == nil ) {
-		return jsonBody["access_token"].(string), nil
+        if jsonBody["access_token"] == nil {
+            logger.Errorf( "Response does not contain access token: %v", string(resBody) )
+            return "", errors.New( "Response does not contain access token" )
+        } else {
+		    return jsonBody["access_token"].(string), nil
+        }
 	} else {
 		logger.Errorf( "Error parsing response: %s", err )
 		logger.Tracef( "Input was: %v", string(resBody) )
@@ -364,6 +452,8 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
     var requestBody io.Reader
     var bodyBytes []byte
 
+    c.logger.Debugf( "Sending request to URL %v", url )
+
     if body != nil {
         closer := ioutil.NopCloser(body)
         bodyBytes, _ := ioutil.ReadAll(closer)
@@ -378,26 +468,69 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
     }
 
     response, err := c.httpClient.Do(request)
-    defer response.Body.Close()
-    if err != nil || response.StatusCode >= 400 {
+    if err != nil {
         resBody,_ := ioutil.ReadAll( response.Body )
         c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-        if err != nil {
-            c.logger.Errorf("HTTP request failed with error: %s", err)
-        } else {
-            c.logger.Errorf("HTTP request returned code: %s", response.Status)
-        }
+        c.logger.Errorf("HTTP request failed with error: %s", err)
         return resBody, err
+    }
+    if response.StatusCode >= 400 {
+        resBody,_ := ioutil.ReadAll( response.Body )
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+        c.logger.Errorf("HTTP response indicates error: %v", response.Status )
+        return resBody, errors.New( "HTTP Response: " + response.Status )
     }
     
     resBody,err := ioutil.ReadAll( response.Body )
 
 	if err != nil {
-		c.logger.Errorf( "Error reading response body: %s", err )
+        if err.Error() == "remote error: tls: user canceled" {
+            c.logger.Warnf( "HTTP request encountered error: %s", err )
+            return resBody, nil
+        } else {
+            c.logger.Errorf( "Error reading response body: %s", err )
+        }
         c.logger.Tracef( "Parsed: %v", string(resBody) )
 	}
 
-    return resBody, err
+    return resBody, nil
+}
+
+func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
+    var requestBody io.Reader
+    var bodyBytes []byte
+
+    c.logger.Debugf( "Sending request to URL %v", url )
+
+    if body != nil {
+        closer := ioutil.NopCloser(body)
+        bodyBytes, _ := ioutil.ReadAll(closer)
+        requestBody = bytes.NewBuffer(bodyBytes)
+        defer closer.Close()
+    }
+
+    request, err := c.createRequest( method, url, requestBody, &header, nil )
+    if err != nil {
+        c.logger.Errorf("Unable to create request: %s", err )
+        return nil, err
+    }
+
+    response, err := c.httpClient.Do(request)
+    if err != nil {
+        resBody,_ := ioutil.ReadAll( response.Body )
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+        c.logger.Errorf("HTTP request failed with error: %s", err)
+        return nil, err
+    }
+    if response.StatusCode >= 400 {
+        resBody,_ := ioutil.ReadAll( response.Body )
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+        c.logger.Errorf("HTTP response indicates error: %v", response.Status )
+        return nil, errors.New( "HTTP Response: " + response.Status )
+    }
+    
+    
+    return response, nil
 }
 
 // internal calls
@@ -408,6 +541,17 @@ func (c *Cx1Client) sendRequest(method, url string, body io.Reader, header http.
 
 func (c *Cx1Client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
     iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
+    return c.sendRequestInternal(method, iamurl, body, header)
+}
+
+func (c *Cx1Client) sendRequestRawIAM(method, base, url string, body io.Reader, header http.Header) (*http.Response, error) {
+    iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
+    return c.sendRequestRaw(method, iamurl, body, header)
+}
+
+// not sure what to call this one? used for /console/ calls, not part of the /realms/ path
+func (c *Cx1Client) sendRequestOther(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
+    iamurl := fmt.Sprintf("%v%v/%v%v", c.iamUrl, base, c.tenant, url)
     return c.sendRequestInternal(method, iamurl, body, header)
 }
 
@@ -459,6 +603,10 @@ func (c Cx1Client) PutFile( URL string, filename string ) (string,error) {
 
 
 // Groups
+func (g *Group) String() string {
+    return fmt.Sprintf( "[%v] %v", shortenGUID( g.GroupID ), g.Name )
+}
+
 func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 	c.logger.Debugf( "Create Group: %v ", groupname  )
 	data := map[string]interface{} {
@@ -479,26 +627,27 @@ func (c *Cx1Client) CreateGroup ( groupname string ) (Group, error) {
 }
 
 func (c *Cx1Client) GetGroups () ([]Group, error) {
-	c.logger.Debug( "Get Groups" )
-    var Groups []Group
+	c.logger.Debug( "Get Cx1 Groups" )
+    var groups []Group
 	
     response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/groups?briefRepresentation=true", nil, nil )
     if err != nil {
-        return Groups, err
+        return groups, err
     }
 
-    Groups, err = c.parseGroups( response )
-    c.logger.Tracef( "Got %d groups", len(Groups) )
-    return Groups, err
+    err = json.Unmarshal( response, &groups )
+    c.logger.Tracef( "Got %d groups", len(groups) )
+    return groups, err
 }
 
 func (c *Cx1Client) GetGroupByName (groupname string) (Group, error) {
-	c.logger.Debugf( "Get Group by name: %v", groupname )
-    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf( "/groups?briefRepresentation=true&search=%v", url.QueryEscape(groupname)), nil, nil )
+	c.logger.Debugf( "Get Cx1 Group by name: %v", groupname )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf( "/groups?briefRepresentation=true&search=%v", url.PathEscape(groupname)), nil, nil )
     if err != nil {
         return Group{}, err
     }
-	groups, err := c.parseGroups( response )
+    var groups []Group
+	err = json.Unmarshal( response, &groups )
 	
     if err != nil {
         c.logger.Errorf( "Error retrieving group: %s", err )
@@ -537,20 +686,66 @@ func (c *Cx1Client) GetGroupByID( groupID string ) (Group, error) {
 }
 
 
-func (c *Cx1Client) GetPresets () ([]Preset, error) {
-	c.logger.Debug( "Get Presets" )
-    var Presets []Preset
-    response, err := c.sendRequest( http.MethodGet, "/queries/presets", nil, nil )
-    if err != nil {
-        return Presets, err
-    }
+// Presets
 
-    Presets, err = c.parsePresets( response )
-    c.logger.Tracef( "Got %d presets", len(Presets) )
-    return Presets, err
+func (p *Preset) String() string {
+    return fmt.Sprintf( "[%d] %v", p.PresetID, p.Name )
 }
 
+func (c *Cx1Client) GetPresets () ([]Preset, error) {
+	c.logger.Debug( "Get Cx1 Presets" )
+    var presets []Preset
+    response, err := c.sendRequest( http.MethodGet, "/queries/presets", nil, nil )
+    if err != nil {
+        return presets, err
+    }
 
+    err = json.Unmarshal( response, &presets )
+    c.logger.Tracef( "Got %d presets", len(presets) )
+    return presets, err
+}
+
+func (c *Cx1Client) GetPresetContents(p *Preset, queries *[]Query ) error {
+    c.logger.Tracef( "Fetching contents for preset %v", p.PresetID )
+
+    if len(*queries) == 0 {
+        return errors.New( "Queries list is empty" )
+    }
+
+    response, err := c.sendRequest( http.MethodGet, fmt.Sprintf( "/presets/%v", p.PresetID ), nil, nil )
+    if err != nil {
+        return err
+    }
+
+    var PresetContents struct {
+        ID              uint64
+        Name            string
+        Description     string
+        Custom          bool
+        QueryIDs        []string
+    }
+
+    err = json.Unmarshal( response, &PresetContents )
+    if err != nil {
+        return errors.Wrap( err, "Failed to parse preset contents" )
+    }
+
+    c.logger.Tracef( "Parsed preset %v with %d queries", PresetContents.Name, len( PresetContents.QueryIDs ) )
+
+    p.Queries = make( []Query, 0 )
+    for _, qid := range PresetContents.QueryIDs {
+        var u uint64
+        u, _ = strconv.ParseUint( qid, 0, 64 )
+        q := c.GetQueryByID( u, queries )
+        if q != nil {
+            p.Queries = append( p.Queries, *q )
+            c.logger.Tracef( " - linked query: %v", q.String() )
+        }
+    }
+
+    p.Filled = true
+    return nil
+}
 
 
 
@@ -581,20 +776,39 @@ func (c *Cx1Client) CreateProject ( projectname string, cx1_group_id string, tag
 	return project, err
 }
 
-func (c *Cx1Client) GetProjects () ([]Project, error) {
-	c.logger.Debug( "Get Projects" )
-    var Projects []Project
+func (p *Project) String() string {
+    return fmt.Sprintf( "[%v] %v (%v)", p.ProjectID, p.Name, p.GetTags() )
+}
+func (p *Project) GetTags() string {
+    str := ""
+    for key, val := range p.Tags {
+        if str == "" {
+            str = key + " = " + val
+        } else {
+            str = str + ", " + key + " = " + val
+        }
+    }
+    return str
+}
+
+func (c *Cx1Client) GetProjects() ([]Project, error) {
+	c.logger.Debug( "Get Cx1 Projects" )
+    var ProjectResponse struct {
+        TotalCount          uint64
+        FilteredCount       uint64
+        Projects            []Project
+    }
 	
     response, err := c.sendRequest( http.MethodGet, "/projects/", nil, nil )
     if err != nil {
-        return Projects, err
+        return ProjectResponse.Projects, err
     }
 
-    Projects, err = c.parseProjects( response )
-    c.logger.Tracef( "Retrieved %d projects",  len(Projects) )
-    return Projects, err
-	
+    err = json.Unmarshal( response, &ProjectResponse )
+    c.logger.Tracef( "Retrieved %d projects",  len(ProjectResponse.Projects) )
+    return ProjectResponse.Projects, err	
 }
+
 func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
     c.logger.Debugf("Getting Project with ID %v...", projectID)
     var project Project
@@ -607,24 +821,30 @@ func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
     err = json.Unmarshal( []byte(data) , &project)
     return project, err
 }
-func (c *Cx1Client) GetProjectByName ( projectname string ) (Project,error) {
-	c.logger.Debugf( "Get Project By Name: %v", projectname )
+func (c *Cx1Client) GetProjectByName( projectname string ) (Project,error) {
+	c.logger.Debugf( "Get Cx1 Project By Name: %v", projectname )
     response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/projects?name=%v", url.QueryEscape(projectname)), nil, nil )
     if err != nil {
         return Project{}, err
     }
+    var ProjectResponse struct {
+        TotalCount          uint64
+        FilteredCount       uint64
+        Projects            []Project
+    }
 
-	projects, err := c.parseProjects( response )
+	err = json.Unmarshal( response, &ProjectResponse )
     if err != nil {
         c.logger.Errorf( "Error getting project: %s", err )
+        c.logger.Tracef( "Failed to unmarshal: %v", string(response) )
         return Project{}, err
     }
 
-	c.logger.Tracef( "Retrieved %d projects", len(projects) ) 
+	c.logger.Tracef( "Retrieved %d projects", len(ProjectResponse.Projects) ) 
 
-	for i := range projects {
-		if projects[i].Name == projectname {
-			match := projects[i]
+	for i := range ProjectResponse.Projects {
+		if ProjectResponse.Projects[i].Name == projectname {
+			match := ProjectResponse.Projects[i]
 			return match, nil
 		}
 	}
@@ -666,8 +886,9 @@ func (c *Cx1Client) GetProjectsByNameAndGroup(projectName, groupID string) ([]Pr
 
     return projectResponse.Projects, err
 }
-func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResult, error) {
-	c.logger.Debug( "Get Scan Results" )
+
+func (c *Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, error) {
+	c.logger.Debug( "Get Cx1 Scan Results" )
     var resultResponse struct {
         Results         []ScanResult
         TotalCount      int
@@ -675,6 +896,10 @@ func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResult, error) {
     
     params := url.Values{
         "scan-id":   {scanID},
+        "limit":    {fmt.Sprintf( "%d", limit )},
+        "state":    []string{},
+        "severity": []string{},
+        "status":   []string{},
     }
     	
     response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil )
@@ -690,6 +915,12 @@ func (c *Cx1Client) GetScanResults (scanID string) ([]ScanResult, error) {
         return []ScanResult{}, err
     }
     c.logger.Debugf( "Retrieved %d results", resultResponse.TotalCount )
+
+    if len(resultResponse.Results) != resultResponse.TotalCount {
+        c.logger.Warnf( "Expected results total count %d but parsed only %d", resultResponse.TotalCount, len( resultResponse.Results ) )
+        c.logger.Warnf( "Response was: %v", string(response) )
+    }
+
     return resultResponse.Results, nil	
 }
 
@@ -705,6 +936,36 @@ func (c *Cx1Client) AddResultsPredicates( predicates []ResultsPredicates ) error
 
     _, err = c.sendRequest( http.MethodPost, "/sast-results-predicates", bytes.NewReader( jsonBody ), nil )
     return err
+}
+
+func (c *Cx1Client) GetResultsPredicates( SimilarityID int64, ProjectID string ) ([]ResultsPredicates, error) {
+    c.logger.Debugf( "Fetching results predicates for project %v similarityId %d", ProjectID, SimilarityID )
+
+    var Predicates struct {
+        PredicateHistoryPerProject []struct {
+            ProjectID       string
+            SimilarityID    int64           `json:"similarityId,string"`
+            Predicates      []ResultsPredicates
+            TotalCount      uint
+        }
+
+        TotalCount      uint
+    }
+    response, err := c.sendRequest( http.MethodGet, fmt.Sprintf("/sast-results-predicates/%d?project-ids=%v", SimilarityID, ProjectID ), nil, nil )
+    if err != nil {
+        return []ResultsPredicates{}, err
+    }
+
+    err = json.Unmarshal( response, &Predicates )
+    if err != nil {
+        return []ResultsPredicates{}, err
+    }
+
+    if Predicates.TotalCount == 0 {
+        return []ResultsPredicates{}, nil
+    }
+
+    return Predicates.PredicateHistoryPerProject[0].Predicates, err
 }
 
 func (r ScanResult) String() string {
@@ -747,7 +1008,7 @@ func (c *Cx1Client) GetScanResultSummary( results []ScanResult ) ScanResultSumma
     return summary
 }
 
-func (s ScanResultStatusSummary) Total() uint {
+func (s ScanResultStatusSummary) Total() uint64 {
     return s.ToVerify + s.Confirmed + s.Urgent + s.ProposedNotExploitable + s.NotExploitable
 }
 func (s ScanResultStatusSummary) String() string {
@@ -852,15 +1113,55 @@ func (c *Cx1Client) SetProjectFileFilter( projectID, filter string, allowOverrid
 
 
 func (c *Cx1Client) GetQueries () ([]Query, error) {
-	c.logger.Debug( "Get Queries" )
-    var Queries []Query
+	c.logger.Debug( "Get Cx1 Queries" )
+    var queries []Query
 
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-	//c.Queries = parseQueries( c.sendRequest( http.MethodGet, "/queries" ) )
+	response, err := c.sendRequest( http.MethodGet, "/presets/queries", nil, nil )
+    if err != nil {
+        return queries, err
+    }
 
-	return Queries, nil
+    err = json.Unmarshal( response, &queries )
+    if err != nil {
+        c.logger.Errorf( "Failed to parse %v", string(response) )   
+    }
+	return queries, err
 }
 
+// convenience
+func (c *Cx1Client) GetQueryGroups(queries *[]Query) []QueryGroup {
+    qgs := make( []QueryGroup, 0 )
+
+    for id, q := range *queries {
+        qg := c.GetQueryGroup( q.Group, q.Language, &qgs )
+        if qg == nil {
+            qgs = append( qgs, QueryGroup{ q.Group, q.Language, []*Query{ &(*queries)[id] } } )
+        } else {
+            qg.Queries = append( qg.Queries, &(*queries)[id] )
+        }
+    }
+    return qgs
+}
+func (c *Cx1Client) GetQueryGroup( name string, language string, qgs *[]QueryGroup ) *QueryGroup {
+    for id, qg := range *qgs {
+        if qg.Name == name {
+            return &(*qgs)[id]
+        }
+    }
+    return nil
+}
+func (c *Cx1Client) GetQueryByID( qid uint64, queries *[]Query ) *Query {
+    for id, q := range *queries {
+        if q.QueryID == qid {
+            return &(*queries)[id]
+        }
+    }
+    return nil
+}
+func (q *Query) String() string {
+    return fmt.Sprintf( "[%d] %v -> %v -> %v", q.QueryID, q.Language, q.Group, q.Name )
+}
 
 // Reports
 func (c *Cx1Client) RequestNewReport(scanID, projectID, branch, reportType string) (string, error) {
@@ -954,11 +1255,58 @@ func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
     return scanmeta, nil
 }
 
+func (s *ScanSummary) TotalCount() uint64 {
+    var count uint64
+    count = 0
+
+    for _, c := range s.SASTCounters.StateCounters{
+        count += c.Counter
+    }
+
+    return count
+}
+
+func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
+    var ScansSummaries struct {
+        ScanSum []ScanSummary               `json:"scansSummaries"`
+        TotalCount  uint64
+    }
+
+    params := url.Values {
+        "scan-ids" : {scanID},
+        "include-queries": {"false"},
+        "include-status-counters" : {"true"},
+        "include-files": {"false"},
+    }
+
+    data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scan-summary/?%v", params.Encode() ), nil, http.Header{})
+    if err != nil {
+        c.logger.Errorf("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
+        return ScanSummary{}, errors.Wrapf(err, "failed to fetch metadata for scan with ID %v", scanID)
+    }
+
+    err = json.Unmarshal(data, &ScansSummaries)
+
+    if err != nil {
+        return ScanSummary{}, err
+    }
+    if ScansSummaries.TotalCount == 0 {
+        return ScanSummary{}, errors.New( fmt.Sprintf( "Failed to retrieve scan summary for scan ID %v", scanID ) )
+    }
+
+    if len(ScansSummaries.ScanSum) == 0 {
+        c.logger.Errorf( "Failed to parse data, 0-len ScanSum.\n%v", string(data) )
+        return ScanSummary{}, errors.New( "Fail" )
+    }
+
+    return ScansSummaries.ScanSum[0], nil
+}
+
 // GetScans returns all scan status on the project addressed by projectID
 func (c *Cx1Client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
     var scanResponse struct {
-        TotalCount          uint
-        FilteredTotalCount  uint 
+        TotalCount          uint64
+        FilteredTotalCount  uint64 
         Scans               []Scan
     }
 
@@ -982,8 +1330,8 @@ func (c *Cx1Client) GetLastScans(projectID string, limit int ) ([]Scan, error) {
 // GetScans returns all scan status on the project addressed by projectID
 func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string ) ([]Scan, error) {
     var scanResponse struct {
-        TotalCount          uint
-        FilteredTotalCount  uint 
+        TotalCount          uint64
+        FilteredTotalCount  uint64 
         Scans               []Scan
     }
     body := url.Values{
@@ -1084,10 +1432,28 @@ func (s *Scan) IsIncremental() (bool, error) {
     return false, errors.New( fmt.Sprintf("Scan %v did not have a sast-engine incremental flag set", s.ScanID) )
 }
 
-
+// convenience
+func (c *Cx1Client) ScanPolling( s *Scan ) (Scan, error) {
+	c.logger.Infof( "Polling status of scan %v", s.ScanID )
+    var err error
+    scan := *s
+	for scan.Status == "Running" {
+		time.Sleep( 10 * time.Second )
+		scan, err = c.GetScan( scan.ScanID )
+		if err != nil {
+			c.logger.Errorf( "Failed to get scan status: %v", err )
+			return scan, err
+		}
+		c.logger.Infof( " - %v", scan.Status )
+        if scan.Status != "Running" {
+            break
+        }
+	}
+    return scan, nil
+}
 
 func (c *Cx1Client) GetUploadURL () (string,error) {
-	c.logger.Debug( "Get Upload URL" )
+	c.logger.Debug( "Get Cx1 Upload URL" )
 	response, err := c.sendRequest( http.MethodPost, "/uploads", nil, nil )
 
     if err != nil {
@@ -1108,196 +1474,328 @@ func (c *Cx1Client) GetUploadURL () (string,error) {
 }
 
 
-
-
-func (c *Cx1Client) GetUsers () ([]User, error) {
-	c.logger.Debug( "Get Users" )
-
-    var Users []User
-    // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/users?briefRepresentation=true", nil, nil )
-    if err != nil {
-        return Users, err
+func (c *Cx1Client) GetCurrentUser() (User, error) {
+    var whoami struct {
+        UserID      string
     }
-
-    Users, err = c.parseUsers( response )
-    c.logger.Tracef( "Got %d users", len(Users) )
-    return Users, err 
-}
-
-
-
-func (c *Cx1Client) ToString() string {
-	return fmt.Sprintf( "%v on %v with token: %v...%v", c.tenant, c.baseUrl, c.authToken[:4], c.authToken[len(c.authToken)-4:] )
-}
-
-
-
-// internal data-parsing
-
-func (c *Cx1Client) parseGroups( input []byte ) ([]Group, error) {
-	//c.logger.Tracef( "Parsing groups from: %v", string(input) )
-	var groups []interface{}
-
-	var groupList []Group
-
-	err := json.Unmarshal( input, &groups )
-	if err != nil {
-		c.logger.Errorf("Error: %s", err )
-		c.logger.Tracef( "Input was: %v", string(input) )
-		return groupList, err
-	} else {
-		groupList = make([]Group, len(groups) )
-		for id := range groups {
-			groupList[id].GroupID = groups[id].(map[string]interface{})["id"].(string)
-			groupList[id].Name = groups[id].(map[string]interface{})["name"].(string)
-
-		}
-	}
-
-	return groupList, nil
-}
-
-
-
-func (c *Cx1Client) parsePresets( input []byte ) ([]Preset, error) {
-	//c.logger.Tracef( "Parsing presets from: %v", string(input) )
-
-	var presets []Preset
-    var presetResponse []map[string]interface{}
-    var err error
-
-    err = json.Unmarshal( []byte( input ), &presetResponse )
-    if err != nil {
-		c.logger.Errorf("Error: %s", err )
-		c.logger.Tracef( "Input was: %v", string(input) )
-		return presets, err
-	}
-
-    presets = make( []Preset, len(presetResponse) )
-
-    for id, p := range presetResponse {
-        presets[id].PresetID = int(p["id"].(float64))
-        presets[id].Name = p["name"].(string)
-    }
-
-	return presets, nil
-
-}
-
-func (c *Cx1Client) parseProjects( input []byte ) ([]Project, error) {
-	//c.logger.Tracef( "Parsing projects from: %v", string(input) )
-	var projectResponse struct {
-        TotalCount int
-        filteredTotalCount int
-        Projects []interface{}
-    }
-    var projectList []Project
-
-	err := json.Unmarshal( []byte( input ), &projectResponse )
-	if err != nil {
-		c.logger.Errorf("Error: %s", err )
-		c.logger.Tracef( "Input was: %v", string(input) )
-		return projectList, err
-	}
-
-	projects := projectResponse.Projects
-
-	projectList = make([]Project, len(projects) )
-	for id := range projects {
-		projectList[id].ProjectID = projects[id].(map[string]interface{})["id"].(string)
-		projectList[id].Name = projects[id].(map[string]interface{})["name"].(string)
-	}
-	
-
-	return projectList, nil
-}
-
-func (c *Cx1Client) parseRunningScans( input []byte ) ([]RunningScan,error) {
-	var scans []RunningScan
-
-	//var scanList []interface{} TODO
-	
-	return scans, nil
-}
-
-func (c *Cx1Client) parseRunningScanFromInterface( input *map[string]interface{} ) (RunningScan, error) {
-	//c.logger.Trace( "Parsing scan from interface" )
-	scan := RunningScan{}
-
-	scan.ScanID = (*input)["id"].(string)
-	scan.ProjectID = (*input)["projectId"].(string)
-	scan.Status = (*input)["status"].(string)
-
-	var err error
-    var err2 error
-
-	scan.CreatedAt, err = time.Parse(time.RFC3339, (*input)["createdAt"].(string) )
-
-	if err != nil {
-		c.logger.Warnf( "Failed to parse time from %v", (*input)["createdAt"].(string) )
-	}
-
-
-
-	scan.UpdatedAt, err2 = time.Parse(time.RFC3339, (*input)["updatedAt"].(string) )
-
-	if err2 != nil {
-		c.logger.Warnf( "Failed to parse time from %v", (*input)["updatedAt"].(string) )
-        err = errors.Wrap( err, err2.Error() )
-	}
-
-	return scan, err
-}
-
-func (c *Cx1Client) parseUsers( input []byte ) ([]User, error) {
-	//c.logger.Tracef( "Parsing users from: %v", string(input) )
-	var users []map[string]interface{}
-
-	var userList []User
-
-	err := json.Unmarshal( []byte( input ), &users )
-	if err != nil {
-		c.logger.Errorf("Error: %s", err )
-		c.logger.Tracef( "Input was: %v", string(input) )
-		return userList, err
-	} else {
-		userList = make([]User, 0 )
-		
-		for _, u := range users {
-			user, err := c.parseUserFromInterface( &u )			
-			if err != nil {
-                c.logger.Errorf("Failed to parse user: %s", err )
-
-            } else {
-				userList = append( userList, user )
-			}
-		}
-	}
-
-	return userList, nil
-}
-
-func (c *Cx1Client) parseUserFromInterface( input *map[string]interface{} ) (User, error) {
-	c.logger.Trace( "Parsing user from interface" )
     var user User
 
-	if (*input)["id"] == nil {
-		return user, errors.New( "No id variable in input" )
-	}
+    response, err := c.sendRequestOther( http.MethodGet, "/auth/admin", "/console/whoami", nil, nil )
+    if err != nil {
+        return user, err
+    }
 
-	user.UserID = (*input)["id"].(string)
+    err = json.Unmarshal( response, &whoami )
+    if err != nil {
+        return user, err
+    }
 
-	if (*input)["firstName"] != nil {
-		user.FirstName = (*input)["firstName"].(string)
-	}
-
-	if (*input)["lastName"] != nil {	
-		user.LastName = (*input)["lastName"].(string)
-	}
-
-	user.UserName = (*input)["username"].(string)
-
-	return user, nil
+    return c.GetUserByID( whoami.UserID )    
 }
 
+func (u *User) String() string {
+    return fmt.Sprintf( "[%v] %v %v (%v)", shortenGUID(u.UserID), u.FirstName, u.LastName, u.Email )
+}
+
+func (c *Cx1Client) GetUsers() ([]User, error) {
+	c.logger.Debug( "Get Cx1 Users" )
+
+    var users []User
+    // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/users", nil, nil )
+    if err != nil {
+        return users, err
+    }
+
+    err = json.Unmarshal( response, &users )
+    c.logger.Tracef( "Got %d users", len(users) )
+    return users, err 
+}
+
+func (c *Cx1Client) GetUserByID(userID string) (User, error) {
+	c.logger.Debug( "Get Cx1 User by ID" )
+
+
+    var user User
+    // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf("/users/%v", userID), nil, nil )
+    if err != nil {
+        return user, err
+    }
+
+    err = json.Unmarshal( response, &user )
+    return user, err 
+}
+
+func (c *Cx1Client) GetUserByUserName(name string) (User, error) {
+	c.logger.Debugf( "Get Cx1 User by Username: %v", name )
+
+    // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf("/users/?exact=true&username=%v", url.QueryEscape( name ) ), nil, nil )
+    if err != nil {
+        return User{}, err
+    }
+
+    var users []User
+
+    err = json.Unmarshal( response, &users )
+    if err != nil {
+        return User{}, err
+    }
+    if len(users) == 0 {
+        return User{}, errors.New("No user found")
+    }
+    if len(users) > 1 {
+        return User{}, errors.New("Too many users match")
+    }
+    return users[0], err 
+}
+
+//{"enabled":true,"attributes":{},"groups":[],"username":"testuser","emailVerified":true,"email":"testuser@cx.local","firstName":"Test","lastName":"User"}
+func (c *Cx1Client) CreateUser( newuser User ) (User, error) {
+    c.logger.Debug( "Creating a new user %v", newuser.String() )
+    newuser.UserID = ""
+    jsonBody, err := json.Marshal( newuser )
+    if err != nil {
+        c.logger.Errorf( "Failed to marshal data somehow: %s", err )
+        return User{}, err
+    }
+    
+    response, err := c.sendRequestRawIAM( http.MethodPost, "/auth/admin", "/users", bytes.NewReader( jsonBody ), nil )
+    if err != nil {
+        return User{}, err
+    }
+
+    location := response.Header.Get("Location")
+    if location != "" {        
+        lastInd := strings.LastIndex( location, "/" )
+        guid := location[lastInd+1:]
+        c.logger.Infof(" New user ID: %v", guid )
+        return c.GetUserByID( guid )
+    } else {
+        return User{}, errors.New( "Unknown error - no Location header redirect in response" )
+    }   
+}
+
+func (c *Cx1Client) DeleteUser( userid string ) error {
+    c.logger.Debug( "Deleting a user %v", userid )
+
+    _, err := c.sendRequestIAM( http.MethodDelete, "/auth/admin", fmt.Sprintf( "/users/%v",userid ), nil, nil )
+    if err != nil {
+        c.logger.Errorf( "Failed to delete user: %s", err )
+        return err
+    }
+    return nil
+}
+
+// Roles and Clients
+func (c *Cx1Client) GetClients() ([]KeyCloakClient, error) {
+    c.logger.Debug( "Getting KeyCloak Clients" )
+    var clients []KeyCloakClient
+
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/clients?briefRepresentation=true", nil, nil )
+    if err != nil {
+        return clients, err
+    }
+
+    err = json.Unmarshal( response, &clients )
+    c.logger.Tracef( "Got %d clients", len(clients) )
+    return clients, err
+}
+
+func (c *Cx1Client) GetClientByName( clientName string ) (KeyCloakClient, error) {
+    c.logger.Debugf( "Getting KeyCloak client with name %v", clientName )
+
+    var client KeyCloakClient
+    clients, err := c.GetClients()
+    if err != nil {
+        return client, err
+    }
+
+    for _, c := range clients {
+        if c.Name == clientName {
+            client = c
+            return client, nil
+        }
+    }
+
+    return client, errors.New( "No such client found" )
+}
+
+func (r *Role) String() string {
+    return fmt.Sprintf( "[%v] %v", shortenGUID( r.RoleID ), r.Name )
+}
+
+func (r *Role) HasCategory( name string ) bool {
+    for _, role := range r.Attributes.Category {
+        if role == name {
+            return true
+        }
+    }
+    return false
+}
+
+func (c *Cx1Client) GetKeyCloakRoles() ([]Role, error) {
+    c.logger.Debugf( "Getting KeyCloak Roles" )
+    var roles []Role
+
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", "/roles?briefRepresentation=true", nil, nil )
+    if err != nil {
+        return roles, err
+    }
+
+    err = json.Unmarshal( response, &roles )
+    c.logger.Tracef( "Got %d roles", len(roles) )
+    return roles, err
+}
+func (c *Cx1Client) GetKeyCloakRoleByName( name string) (Role, error) {
+    c.logger.Debugf( "Getting KeyCloak Role named %v", name )
+    var role Role
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", fmt.Sprintf("/roles/%v", url.QueryEscape(name) ), nil, nil )
+    if err != nil {
+        return role, err
+    }
+
+    err = json.Unmarshal( response, &role )
+    return role, err
+}
+
+func (c *Cx1Client) GetRolesByClient(clientId string) ([]Role, error) {
+    c.logger.Debugf( "Getting KeyCloak Roles for client %v", clientId )
+    var roles []Role
+
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", fmt.Sprintf( "/clients/%v/roles?briefRepresentation=true", clientId ), nil, nil )
+    if err != nil {
+        return roles, err
+    }
+
+    err = json.Unmarshal( response, &roles )
+    c.logger.Tracef( "Got %d roles", len(roles) )
+    return roles, err
+}
+
+func (c *Cx1Client) GetRoleByClientAndName(clientId string, name string) (Role, error) {
+    c.logger.Debugf( "Getting KeyCloak Roles for client %v with name %v", clientId, name )
+    var role Role
+
+    response, err := c.sendRequestIAM( http.MethodGet, "/auth/admin", fmt.Sprintf( "/clients/%v/roles/%v", clientId, url.PathEscape(name) ), nil, nil )
+    if err != nil {
+        return role, err
+    }
+
+    err = json.Unmarshal( response, &role )
+    return role, err
+}
+
+func (c *Cx1Client) CreateASTRole(roleName, createdBy string) (Role, error) {
+    c.logger.Debugf( "User %v creating client role %v", createdBy, roleName )
+    data := map[string]interface{} {
+		"name" : roleName,
+        "composite" : true,
+        "clientRole" : true,
+        "attributes" : map[string]interface{}{
+            "category" : []string{ "Composite role" },
+            "type" : []string{ "Role" },
+            "creator" : []string{ fmt.Sprintf( "SAST2CX1 by %v", createdBy ) },
+            "lastUpdate" : []int64{ time.Now().UnixMilli() },
+        },
+	}
+    jsonBody, err := json.Marshal( data )
+    if err != nil {
+        c.logger.Errorf( "Failed to marshal data somehow: %s", err )
+        return Role{}, err
+    }
+    _, err = c.sendRequestIAM( http.MethodPost, "/auth/admin", fmt.Sprintf( "/clients/%v/roles", c.GetASTAppID() ), bytes.NewReader(jsonBody), nil )
+    if err != nil {
+        c.logger.Errorf( "Failed to create a client role: %s", err )
+        return Role{}, err
+    }
+
+    return c.GetRoleByClientAndName( c.GetASTAppID(), roleName ) 
+}
+
+// convenience function
+func (c *Cx1Client) GetASTAppID() string {
+    if astAppID == "" {
+        client, err := c.GetClientByName( "ast-app" )
+        if err != nil {
+            c.logger.Warnf( "Error finding AST App ID: %s", err )
+            return ""
+        }
+
+        astAppID = client.ClientID
+    } 
+
+    return astAppID
+}
+
+func (c *Cx1Client) GetASTRoles() ([]Role, error) {
+    c.logger.Debug( "Getting roles set for ast-app client" )
+    return c.GetRolesByClient( c.GetASTAppID() )
+}
+
+func (c *Cx1Client) GetASTRoleByName(name string) (Role, error) {
+    c.logger.Debugf( "Getting role named %v in ast-app client", name )
+    return c.GetRoleByClientAndName( c.GetASTAppID(), name )
+}
+
+// convenience function to get both KeyCloak (system) roles plus the AST-APP-specific roles
+func (c *Cx1Client) GetCombinedRoles() ([]Role, error) {
+    c.logger.Debug( "Getting System (KeyCloak) and Application (AST-APP) roles" )
+    ast_roles, err := c.GetASTRoles()
+    if err != nil {
+        return ast_roles, err
+    }
+    system_roles, err := c.GetKeyCloakRoles()
+    if err != nil {
+        return ast_roles, err
+    }
+
+    ast_roles = append( ast_roles, system_roles... )
+    return ast_roles, nil
+}
+func (c *Cx1Client) GetCombinedRoleByName( name string ) (Role, error) {
+    c.logger.Debug( "Getting System (KeyCloak) and Application (AST-APP) role named: %v", name )
+
+    role, err := c.GetASTRoleByName( name )
+    if err == nil {
+        return role, nil
+    }
+    role, err = c.GetKeyCloakRoleByName( name )
+    if err == nil {
+        return role, nil
+    }
+
+    return Role{}, errors.New( "Role not found" )
+}
+
+
+
+
+func (c *Cx1Client) String() string {
+	return fmt.Sprintf( "%v on %v with token: %v", c.tenant, c.baseUrl, shortenGUID(c.authToken)  )
+}
+
+
+func (c *Cx1Client) ProjectLink( p *Project ) string {
+    return fmt.Sprintf( "%v/projects/%v/overview", c.baseUrl, p.ProjectID )
+}
+func (c *Cx1Client) PresetLink( p *Preset ) string {
+    return fmt.Sprintf( "%v/resourceManagement/presets?presetId=%d", c.baseUrl, p.PresetID )
+}
+func (c *Cx1Client) UserLink( u *User ) string {
+    return fmt.Sprintf( "%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID )
+}
+func (c *Cx1Client) RoleLink( r *Role ) string {
+    return fmt.Sprintf( "%v/auth/admin/%v/console/#/realms/%v/roles/%v", c.iamUrl, c.tenant, c.tenant, r.RoleID )
+}
+func (c *Cx1Client) GroupLink( g *Group ) string {
+    return fmt.Sprintf( "%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID )
+}
+
+func shortenGUID( guid string ) string {
+    if len(guid) <=2 {
+        return ".."
+    }
+    return fmt.Sprintf( "%v..%v", guid[:2], guid[len(guid)-2:] )
+}
