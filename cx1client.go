@@ -281,11 +281,13 @@ type Status struct {
 }
 
 type User struct {
-	UserID string               `json:"id"`
-	FirstName string
-	LastName string
-	UserName string
-    Email   string
+    Enabled bool                `json:"enabled"`
+	UserID string               `json:"id,omitempty"`
+	FirstName string            `json:"firstName"`
+	LastName string             `json:"lastName"`  
+	UserName string             `json:"username"`
+    Email   string              `json:"email"`
+    Groups  []string            `json:"groups"`
 }
 
 type WorkflowLog struct {
@@ -494,6 +496,43 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
     return resBody, nil
 }
 
+func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
+    var requestBody io.Reader
+    var bodyBytes []byte
+
+    c.logger.Debugf( "Sending request to URL %v", url )
+
+    if body != nil {
+        closer := ioutil.NopCloser(body)
+        bodyBytes, _ := ioutil.ReadAll(closer)
+        requestBody = bytes.NewBuffer(bodyBytes)
+        defer closer.Close()
+    }
+
+    request, err := c.createRequest( method, url, requestBody, &header, nil )
+    if err != nil {
+        c.logger.Errorf("Unable to create request: %s", err )
+        return nil, err
+    }
+
+    response, err := c.httpClient.Do(request)
+    if err != nil {
+        resBody,_ := ioutil.ReadAll( response.Body )
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+        c.logger.Errorf("HTTP request failed with error: %s", err)
+        return nil, err
+    }
+    if response.StatusCode >= 400 {
+        resBody,_ := ioutil.ReadAll( response.Body )
+        c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+        c.logger.Errorf("HTTP response indicates error: %v", response.Status )
+        return nil, errors.New( "HTTP Response: " + response.Status )
+    }
+    
+    
+    return response, nil
+}
+
 // internal calls
 func (c *Cx1Client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
     cx1url := fmt.Sprintf("%v/api%v", c.baseUrl, url)
@@ -503,6 +542,11 @@ func (c *Cx1Client) sendRequest(method, url string, body io.Reader, header http.
 func (c *Cx1Client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
     iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
     return c.sendRequestInternal(method, iamurl, body, header)
+}
+
+func (c *Cx1Client) sendRequestRawIAM(method, base, url string, body io.Reader, header http.Header) (*http.Response, error) {
+    iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
+    return c.sendRequestRaw(method, iamurl, body, header)
 }
 
 // not sure what to call this one? used for /console/ calls, not part of the /realms/ path
@@ -1453,12 +1497,12 @@ func (u *User) String() string {
     return fmt.Sprintf( "[%v] %v %v (%v)", shortenGUID(u.UserID), u.FirstName, u.LastName, u.Email )
 }
 
-func (c *Cx1Client) GetUsers () ([]User, error) {
+func (c *Cx1Client) GetUsers() ([]User, error) {
 	c.logger.Debug( "Get Cx1 Users" )
 
     var users []User
     // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/users?briefRepresentation=true", nil, nil )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", "/users", nil, nil )
     if err != nil {
         return users, err
     }
@@ -1468,19 +1512,80 @@ func (c *Cx1Client) GetUsers () ([]User, error) {
     return users, err 
 }
 
-func (c *Cx1Client) GetUserByID (userID string) (User, error) {
+func (c *Cx1Client) GetUserByID(userID string) (User, error) {
 	c.logger.Debug( "Get Cx1 User by ID" )
 
 
     var user User
     // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
-    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf("/users/%v?briefRepresentation=true", userID), nil, nil )
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf("/users/%v", userID), nil, nil )
     if err != nil {
         return user, err
     }
 
     err = json.Unmarshal( response, &user )
     return user, err 
+}
+
+func (c *Cx1Client) GetUserByUserName(name string) (User, error) {
+	c.logger.Debugf( "Get Cx1 User by Username: %v", name )
+
+    // Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.	
+    response, err := c.sendRequestIAM( http.MethodGet,  "/auth/admin", fmt.Sprintf("/users/?exact=true&username=%v", url.QueryEscape( name ) ), nil, nil )
+    if err != nil {
+        return User{}, err
+    }
+
+    var users []User
+
+    err = json.Unmarshal( response, &users )
+    if err != nil {
+        return User{}, err
+    }
+    if len(users) == 0 {
+        return User{}, errors.New("No user found")
+    }
+    if len(users) > 1 {
+        return User{}, errors.New("Too many users match")
+    }
+    return users[0], err 
+}
+
+//{"enabled":true,"attributes":{},"groups":[],"username":"testuser","emailVerified":true,"email":"testuser@cx.local","firstName":"Test","lastName":"User"}
+func (c *Cx1Client) CreateUser( newuser User ) (User, error) {
+    c.logger.Debug( "Creating a new user %v", newuser.String() )
+    newuser.UserID = ""
+    jsonBody, err := json.Marshal( newuser )
+    if err != nil {
+        c.logger.Errorf( "Failed to marshal data somehow: %s", err )
+        return User{}, err
+    }
+    
+    response, err := c.sendRequestRawIAM( http.MethodPost, "/auth/admin", "/users", bytes.NewReader( jsonBody ), nil )
+    if err != nil {
+        return User{}, err
+    }
+
+    location := response.Header.Get("Location")
+    if location != "" {        
+        lastInd := strings.LastIndex( location, "/" )
+        guid := location[lastInd+1:]
+        c.logger.Infof(" New user ID: %v", guid )
+        return c.GetUserByID( guid )
+    } else {
+        return User{}, errors.New( "Unknown error - no Location header redirect in response" )
+    }   
+}
+
+func (c *Cx1Client) DeleteUser( userid string ) error {
+    c.logger.Debug( "Deleting a user %v", userid )
+
+    _, err := c.sendRequestIAM( http.MethodDelete, "/auth/admin", fmt.Sprintf( "/users/%v",userid ), nil, nil )
+    if err != nil {
+        c.logger.Errorf( "Failed to delete user: %s", err )
+        return err
+    }
+    return nil
 }
 
 // Roles and Clients
@@ -1689,5 +1794,8 @@ func (c *Cx1Client) GroupLink( g *Group ) string {
 }
 
 func shortenGUID( guid string ) string {
+    if len(guid) <=2 {
+        return ".."
+    }
     return fmt.Sprintf( "%v..%v", guid[:2], guid[len(guid)-2:] )
 }
