@@ -195,6 +195,14 @@ func (c *Cx1Cache) GetUserByEmail(email string) (*User, error) {
 	}
 	return nil, errors.New("No such user")
 }
+func (c *Cx1Cache) GetUserByString(displaystring string) (*User, error) {
+	for id, g := range c.Users {
+		if g.String() == displaystring {
+			return &c.Users[id], nil
+		}
+	}
+	return nil, errors.New("No such user")
+}
 
 func (c *Cx1Cache) GetProject(projectID string) (*Project, error) {
 	for id, g := range c.Projects {
