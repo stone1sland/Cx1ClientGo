@@ -1,0 +1,293 @@
+package Cx1ClientGo
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+
+	"github.com/pkg/errors"
+)
+
+// Projects
+func (c *Cx1Client) CreateProject(projectname string, cx1_group_id string, tags map[string]string) (Project, error) {
+	c.logger.Debugf("Create Project: %v, group id %v", projectname, cx1_group_id)
+	data := map[string]interface{}{
+		"name":        projectname,
+		"groups":      []string{cx1_group_id},
+		"tags":        tags,
+		"criticality": 3,
+		"origin":      cxOrigin,
+	}
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		return Project{}, err
+	}
+
+	var project Project
+	response, err := c.sendRequest(http.MethodPost, "/projects", bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		c.logger.Errorf("Error while creating project: %s", err)
+		return project, err
+	}
+
+	err = json.Unmarshal(response, &project)
+
+	return project, err
+}
+
+func (p *Project) String() string {
+	return fmt.Sprintf("[%v] %v (%v)", p.ProjectID, p.Name, p.GetTags())
+}
+func (p *Project) GetTags() string {
+	str := ""
+	for key, val := range p.Tags {
+		if str == "" {
+			str = key + " = " + val
+		} else {
+			str = str + ", " + key + " = " + val
+		}
+	}
+	return str
+}
+
+func (c *Cx1Client) GetProjects() ([]Project, error) {
+	c.logger.Debug("Get Cx1 Projects")
+	var ProjectResponse struct {
+		TotalCount    uint64
+		FilteredCount uint64
+		Projects      []Project
+	}
+
+	response, err := c.sendRequest(http.MethodGet, "/projects/", nil, nil)
+	if err != nil {
+		return ProjectResponse.Projects, err
+	}
+
+	err = json.Unmarshal(response, &ProjectResponse)
+	c.logger.Tracef("Retrieved %d projects", len(ProjectResponse.Projects))
+	return ProjectResponse.Projects, err
+}
+
+func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
+	c.logger.Debugf("Getting Project with ID %v...", projectID)
+	var project Project
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/%v", projectID), nil, nil)
+	if err != nil {
+		return project, errors.Wrapf(err, "fetching project %v failed", projectID)
+	}
+
+	err = json.Unmarshal([]byte(data), &project)
+	return project, err
+}
+func (c *Cx1Client) GetProjectByName(projectname string) (Project, error) {
+	c.logger.Debugf("Get Cx1 Project By Name: %v", projectname)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?name=%v", url.QueryEscape(projectname)), nil, nil)
+	if err != nil {
+		return Project{}, err
+	}
+	var ProjectResponse struct {
+		TotalCount    uint64
+		FilteredCount uint64
+		Projects      []Project
+	}
+
+	err = json.Unmarshal(response, &ProjectResponse)
+	if err != nil {
+		c.logger.Errorf("Error getting project: %s", err)
+		c.logger.Tracef("Failed to unmarshal: %v", string(response))
+		return Project{}, err
+	}
+
+	c.logger.Tracef("Retrieved %d projects", len(ProjectResponse.Projects))
+
+	for i := range ProjectResponse.Projects {
+		if ProjectResponse.Projects[i].Name == projectname {
+			match := ProjectResponse.Projects[i]
+			return match, nil
+		}
+	}
+
+	return Project{}, errors.New("No such project found")
+}
+func (c *Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string) ([]Project, error) {
+	c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
+
+	var projectResponse struct {
+		TotalCount    int       `json:"totalCount"`
+		FilteredCount int       `json:"filteredCount"`
+		Projects      []Project `json:"projects"`
+	}
+
+	var data []byte
+	var err error
+
+	body := url.Values{}
+	if len(groupID) > 0 {
+		body.Add("groups", groupID)
+	}
+	if len(projectName) > 0 {
+		body.Add("name", projectName)
+	}
+
+	if len(body) > 0 {
+		data, err = c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/?%v", body.Encode()), nil, nil)
+	} else {
+		data, err = c.sendRequest(http.MethodGet, "/projects/", nil, nil)
+	}
+	if err != nil {
+		return projectResponse.Projects, errors.Wrapf(err, "fetching project %v failed", projectName)
+	}
+
+	err = json.Unmarshal(data, &projectResponse)
+	c.logger.Tracef("Retrieved %d projects matching %v in group ID %v", len(projectResponse.Projects), projectName, groupID)
+
+	return projectResponse.Projects, err
+}
+
+// convenience
+func (p *Project) IsInGroup(groupId string) bool {
+	for _, g := range p.Groups {
+		if g == groupId {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cx1Client) GetProjectConfiguration(projectID string) ([]ProjectConfigurationSetting, error) {
+	c.logger.Debug("Getting project configuration")
+	var projectConfigurations []ProjectConfigurationSetting
+	params := url.Values{
+		"project-id": {projectID},
+	}
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/configuration/project?%v", params.Encode()), nil, nil)
+
+	if err != nil {
+		c.logger.Errorf("Failed to get project configuration for project ID %v: %s", projectID, err)
+		return projectConfigurations, err
+	}
+
+	err = json.Unmarshal([]byte(data), &projectConfigurations)
+	return projectConfigurations, err
+}
+
+// UpdateProjectConfiguration updates the configuration of the project addressed by projectID
+func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []ProjectConfigurationSetting) error {
+	if len(settings) == 0 {
+		return errors.New("Empty list of settings provided.")
+	}
+
+	params := url.Values{
+		"project-id": {projectID},
+	}
+
+	jsonBody, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPatch, fmt.Sprintf("/configuration/project?%v", params.Encode()), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		c.logger.Errorf("Failed to update project configuration: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+func (c *Cx1Client) SetProjectBranch(projectID, branch string, allowOverride bool) error {
+	var setting ProjectConfigurationSetting
+	setting.Key = "scan.handler.git.branch"
+	setting.Value = branch
+	setting.AllowOverride = allowOverride
+
+	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+}
+
+func (c *Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride bool) error {
+	var setting ProjectConfigurationSetting
+	setting.Key = "scan.config.sast.presetName"
+	setting.Value = presetName
+	setting.AllowOverride = allowOverride
+
+	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+}
+
+func (c *Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allowOverride bool) error {
+	var setting ProjectConfigurationSetting
+	setting.Key = "scan.config.sast.languageMode"
+	setting.Value = languageMode
+	setting.AllowOverride = allowOverride
+
+	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+}
+
+func (c *Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride bool) error {
+	var setting ProjectConfigurationSetting
+	setting.Key = "scan.config.sast.filter"
+	setting.Value = filter
+	setting.AllowOverride = allowOverride
+
+	// TODO - apply the filter across all languages? set up separate calls per engine? engine as param?
+
+	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+}
+
+// GetScans returns all scan status on the project addressed by projectID
+func (c *Cx1Client) GetLastScans(projectID string, limit int) ([]Scan, error) {
+	var scanResponse struct {
+		TotalCount         uint64
+		FilteredTotalCount uint64
+		Scans              []Scan
+	}
+
+	body := url.Values{
+		"project-id": {projectID},
+		"offset":     {fmt.Sprintf("%d", 0)},
+		"limit":      {fmt.Sprintf("%d", limit)},
+		"sort":       {"+created_at"},
+	}
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil)
+	if err != nil {
+		c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
+		return scanResponse.Scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
+	}
+
+	err = json.Unmarshal(data, &scanResponse)
+	return scanResponse.Scans, err
+}
+
+// GetScans returns all scan status on the project addressed by projectID
+func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string) ([]Scan, error) {
+	var scanResponse struct {
+		TotalCount         uint64
+		FilteredTotalCount uint64
+		Scans              []Scan
+	}
+	body := url.Values{
+		"project-id": {projectID},
+		"offset":     {fmt.Sprintf("%d", 0)},
+		"limit":      {fmt.Sprintf("%d", limit)},
+		"sort":       {"+created_at"},
+		"statuses":   status,
+	}
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil)
+	if err != nil {
+		c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
+		return scanResponse.Scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
+	}
+
+	//c.logger.Infof( "Returned: %v", string(data) )
+
+	err = json.Unmarshal(data, &scanResponse)
+	return scanResponse.Scans, err
+}
+
+func (c *Cx1Client) ProjectLink(p *Project) string {
+	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
+}
