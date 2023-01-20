@@ -89,6 +89,31 @@ func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
 	return ScansSummaries.ScanSum[0], nil
 }
 
+func (c *Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {
+	c.logger.Debugf("Fetching scan logs for scan %v", scanID)
+
+	response, err := c.sendRequestRawCx1(http.MethodGet, fmt.Sprintf("/logs/%v/%v", scanID, engine), nil, nil)
+
+	if err != nil {
+		c.logger.Errorf("Error retrieving scanlog url: %s", err)
+		return []byte{}, err
+	}
+
+	enginelogURL := response.Header.Get("Location")
+	if enginelogURL == "" {
+		return []byte{}, errors.New("Expected location header response not found")
+	}
+
+	c.logger.Infof("Retrieved url: %v", enginelogURL)
+	data, err := c.sendRequestInternal(http.MethodGet, enginelogURL, nil, nil)
+	if err != nil {
+		c.logger.Errorf("Failed to download logs from %v: %s", enginelogURL, err)
+		return []byte{}, nil
+	}
+
+	return data, nil
+}
+
 func (c *Cx1Client) scanProject(scanConfig map[string]interface{}) (Scan, error) {
 	scan := Scan{}
 
@@ -208,7 +233,7 @@ func (c *Cx1Client) GetUploadURL() (string, error) {
 	}
 }
 
-func (c Cx1Client) PutFile(URL string, filename string) (string, error) {
+func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
 	c.logger.Tracef("Putting file %v to %v", filename, URL)
 
 	fileContents, err := os.ReadFile(filename)

@@ -28,6 +28,9 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 	if err != nil {
 		return nil, err
 	}
+
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+
 	cli := Cx1Client{client, token, base_url, iam_url, tenant, logger}
 	return &cli, nil
 }
@@ -37,6 +40,8 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	if err != nil {
 		return nil, err
 	}
+
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 
 	cli := Cx1Client{client, token, base_url, iam_url, tenant, logger}
 	return &cli, nil
@@ -237,7 +242,10 @@ func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header ht
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		resBody, _ := io.ReadAll(response.Body)
+		var resBody []byte
+		if response.Body != nil {
+			resBody, _ = io.ReadAll(response.Body)
+		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
 		c.logger.Errorf("HTTP request failed with error: %s", err)
 		return nil, err
@@ -252,10 +260,14 @@ func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header ht
 	return response, nil
 }
 
-// internal calls
 func (c *Cx1Client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
 	cx1url := fmt.Sprintf("%v/api%v", c.baseUrl, url)
 	return c.sendRequestInternal(method, cx1url, body, header)
+}
+
+func (c *Cx1Client) sendRequestRawCx1(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
+	cx1url := fmt.Sprintf("%v/api%v", c.baseUrl, url)
+	return c.sendRequestRaw(method, cx1url, body, header)
 }
 
 func (c *Cx1Client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
