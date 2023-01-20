@@ -43,7 +43,7 @@ func (c *Cx1Cache) RefreshProjects(client *Cx1Client) error {
 	var err error
 	if !c.ProjectRefresh {
 		c.ProjectRefresh = true
-		c.Projects, err = client.GetProjects()
+		c.Projects, err = client.GetProjects(0)
 		c.ProjectRefresh = false
 	}
 	return err

@@ -94,3 +94,16 @@ func (c *Cx1Client) GetGroupByID(groupID string) (Group, error) {
 func (c *Cx1Client) GroupLink(g *Group) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID)
 }
+
+// convenience
+func (c *Cx1Client) GetOrCreateGroup(name string) (Group, error) {
+	group, err := c.GetGroupByName(name)
+	if err != nil {
+		group, err = c.CreateGroup(name)
+		if err != nil {
+			return group, err
+		}
+	}
+
+	return group, nil
+}

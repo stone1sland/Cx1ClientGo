@@ -11,15 +11,23 @@ import (
 )
 
 // Projects
-func (c *Cx1Client) CreateProject(projectname string, cx1_group_id string, tags map[string]string) (Project, error) {
-	c.logger.Debugf("Create Project: %v, group id %v", projectname, cx1_group_id)
+func (c *Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tags map[string]string) (Project, error) {
+	c.logger.Debugf("Create Project: %v", projectname)
 	data := map[string]interface{}{
 		"name":        projectname,
-		"groups":      []string{cx1_group_id},
-		"tags":        tags,
+		"groups":      []string{},
+		"tags":        map[string]string{},
 		"criticality": 3,
 		"origin":      cxOrigin,
 	}
+
+	if len(tags) > 0 {
+		data["tags"] = tags
+	}
+	if len(cx1_group_ids) > 0 {
+		data["groups"] = cx1_group_ids
+	}
+
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
 		return Project{}, err
@@ -38,8 +46,9 @@ func (c *Cx1Client) CreateProject(projectname string, cx1_group_id string, tags 
 }
 
 func (p *Project) String() string {
-	return fmt.Sprintf("[%v] %v (%v)", p.ProjectID, p.Name, p.GetTags())
+	return fmt.Sprintf("[%v] %v", ShortenGUID(p.ProjectID), p.Name)
 }
+
 func (p *Project) GetTags() string {
 	str := ""
 	for key, val := range p.Tags {
@@ -52,7 +61,7 @@ func (p *Project) GetTags() string {
 	return str
 }
 
-func (c *Cx1Client) GetProjects() ([]Project, error) {
+func (c *Cx1Client) GetProjects(limit uint64) ([]Project, error) {
 	c.logger.Debug("Get Cx1 Projects")
 	var ProjectResponse struct {
 		TotalCount    uint64
@@ -60,7 +69,13 @@ func (c *Cx1Client) GetProjects() ([]Project, error) {
 		Projects      []Project
 	}
 
-	response, err := c.sendRequest(http.MethodGet, "/projects/", nil, nil)
+	body := url.Values{
+		//"offset":     {fmt.Sprintf("%d", 0)},
+		"limit": {fmt.Sprintf("%d", limit)},
+		//"name":  {projectname},
+	}
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/?%v", body.Encode()), nil, nil)
 	if err != nil {
 		return ProjectResponse.Projects, err
 	}
@@ -82,36 +97,59 @@ func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
 	err = json.Unmarshal([]byte(data), &project)
 	return project, err
 }
+
 func (c *Cx1Client) GetProjectByName(projectname string) (Project, error) {
-	c.logger.Debugf("Get Cx1 Project By Name: %v", projectname)
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?name=%v", url.QueryEscape(projectname)), nil, nil)
+	count, err := c.GetProjectCountByName(projectname)
 	if err != nil {
 		return Project{}, err
 	}
+
+	projects, err := c.GetProjectsByName(projectname, count)
+	if err != nil {
+		return Project{}, err
+	}
+
+	for _, p := range projects {
+		if p.Name == projectname {
+			return p, nil
+		}
+	}
+
+	return Project{}, errors.New("No matching project found")
+}
+
+func (c *Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Project, error) {
+	c.logger.Debugf("Get Cx1 Projects By Name: %v", projectname)
+
+	body := url.Values{
+		//"offset":     {fmt.Sprintf("%d", 0)},
+		"limit": {fmt.Sprintf("%d", limit)},
+		"name":  {projectname},
+	}
+
 	var ProjectResponse struct {
 		TotalCount    uint64
 		FilteredCount uint64
 		Projects      []Project
 	}
 
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?%v", body.Encode()), nil, nil)
+	if err != nil {
+		return ProjectResponse.Projects, err
+	}
+
 	err = json.Unmarshal(response, &ProjectResponse)
 	if err != nil {
 		c.logger.Errorf("Error getting project: %s", err)
 		c.logger.Tracef("Failed to unmarshal: %v", string(response))
-		return Project{}, err
+		return ProjectResponse.Projects, err
 	}
 
 	c.logger.Tracef("Retrieved %d projects", len(ProjectResponse.Projects))
 
-	for i := range ProjectResponse.Projects {
-		if ProjectResponse.Projects[i].Name == projectname {
-			match := ProjectResponse.Projects[i]
-			return match, nil
-		}
-	}
-
-	return Project{}, errors.New("No such project found")
+	return ProjectResponse.Projects, nil
 }
+
 func (c *Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string) ([]Project, error) {
 	c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
 
@@ -288,6 +326,81 @@ func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []s
 	return scanResponse.Scans, err
 }
 
+// convenience
+func (c *Cx1Client) GetProjectCount() (uint64, error) {
+	c.logger.Debug("Get Cx1 Projects")
+	var ProjectResponse struct {
+		TotalCount         uint64
+		FilteredTotalCount uint64
+	}
+
+	body := url.Values{
+		//"offset":     {fmt.Sprintf("%d", 0)},
+		"limit": {fmt.Sprintf("%d", 1)},
+		//"sort":       {"+created_at"},
+	}
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?%v", body.Encode()), nil, nil)
+
+	if err != nil {
+		return 0, err
+	}
+
+	err = json.Unmarshal(response, &ProjectResponse)
+	return ProjectResponse.TotalCount, err
+}
+
+func (c *Cx1Client) GetProjectCountByName(name string) (uint64, error) {
+	c.logger.Debug("Get Cx1 Projects")
+	var ProjectResponse struct {
+		TotalCount         uint64
+		FilteredTotalCount uint64
+	}
+
+	body := url.Values{
+		//"offset":     {fmt.Sprintf("%d", 0)},
+		"limit": {fmt.Sprintf("%d", 1)},
+		"name":  {name},
+	}
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects?%v", body.Encode()), nil, nil)
+
+	if err != nil {
+		return 0, err
+	}
+
+	err = json.Unmarshal(response, &ProjectResponse)
+	return ProjectResponse.FilteredTotalCount, err
+}
+
 func (c *Cx1Client) ProjectLink(p *Project) string {
 	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
+}
+
+func (c *Cx1Client) SaveProject(project *Project) error {
+	c.logger.Debugf("Updating project %v", project.String())
+
+	jsonBody, err := json.Marshal(project)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/projects/%v", project.ProjectID), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+func (p *Project) AssignGroup(group *Group) {
+	if p.IsInGroup(group.GroupID) {
+		return
+	}
+	p.Groups = append(p.Groups, group.GroupID)
+}
+
+func (c *Cx1Client) GetOrCreateProject(name string) (Project, error) {
+	project, err := c.GetProjectByName(name)
+	if err == nil {
+		return project, nil
+	}
+
+	return c.CreateProject(name, []string{}, map[string]string{})
 }

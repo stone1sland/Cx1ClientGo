@@ -243,3 +243,7 @@ func (c Cx1Client) PutFile(URL string, filename string) (string, error) {
 
 	return string(resBody), nil
 }
+
+func (s *Scan) String() string {
+	return fmt.Sprintf("[%v] %v", ShortenGUID(s.ScanID), s.ProjectName)
+}

@@ -16,23 +16,21 @@ type Cx1Client struct {
 	logger     *logrus.Logger
 }
 
-/*
-{
-    "id": "429cd571-8772-4a2a-8bc6-1eb2b83b2216",
-    "name": "Testapp7",
-    "description": "",
-    "criticality": 3,
-    "rules": [
-        {
-            "type": "project.name.contains",
-            "value": "testapp7"
-        }
-    ],
-    "tags": {},
-    "createdAt": "2023-01-19T11:16:57.611996662Z",
-    "updatedAt": "2023-01-19T11:16:57.611996662Z"
+type Application struct {
+	ApplicationID string            `json:"id"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	Criticality   uint              `json:"criticality"`
+	Rules         []ApplicationRule `json:"rules"`
+	Tags          map[string]string `json:"tags"`
+	CreatedAt     string            `json:"createdAt"`
+	UpdatedAt     string            `json:"updatedAt"`
 }
-*/
+
+type ApplicationRule struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
 
 type Group struct {
 	GroupID string `json:"id"`
