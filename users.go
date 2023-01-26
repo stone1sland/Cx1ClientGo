@@ -112,6 +112,18 @@ func (c *Cx1Client) CreateUser(newuser User) (User, error) {
 	}
 }
 
+func (c *Cx1Client) SaveUser(user *User) error {
+	c.logger.Debugf("Updating user %v", user.String())
+	jsonBody, err := json.Marshal(user)
+	if err != nil {
+		c.logger.Errorf("Failed to marshal data somehow: %s", err)
+		return err
+	}
+
+	_, err = c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/users/%v", user.UserID), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
 func (c *Cx1Client) DeleteUser(userid string) error {
 	c.logger.Debugf("Deleting a user %v", userid)
 
@@ -175,4 +187,93 @@ func (c *Cx1Client) RemoveUserASTRoleMappings(userID string, roles []Role) error
 
 func (c *Cx1Client) UserLink(u *User) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID)
+}
+
+func (c *Cx1Client) GetUserGroups(user *User) error {
+	// fills user's group struct
+	var usergroups []struct {
+		Id   string
+		Name string
+		Path string
+	}
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/groups", user.UserID), nil, nil)
+
+	if err != nil {
+		c.logger.Errorf("Failed to fetch user's groups: %s", err)
+		return err
+	}
+
+	//c.logger.Infof("Response: %v", string(response))
+
+	err = json.Unmarshal(response, &usergroups)
+	if err != nil {
+		c.logger.Errorf("Failed to unmarshal response: %s", err)
+		return err
+	}
+
+	//c.logger.Infof("User is in %d groups", len(usergroups))
+
+	user.Groups = make([]string, 0)
+	for _, ug := range usergroups {
+		user.Groups = append(user.Groups, ug.Id)
+		c.logger.Infof("User is in group: %v %v", ug.Id, ug.Name)
+	}
+
+	return nil
+}
+
+func (u *User) IsInGroup(groupId string) bool {
+	for _, g := range u.Groups {
+		if g == groupId {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cx1Client) AssignUserToGroup(user *User, groupId string) error {
+	if !user.IsInGroup(groupId) {
+		params := map[string]string{
+			"realm":   c.tenant,
+			"userId":  user.UserID,
+			"groupId": groupId,
+		}
+
+		jsonBody, err := json.Marshal(params)
+		if err != nil {
+			c.logger.Errorf("Failed to marshal group params: %s", err)
+			return err
+		}
+
+		_, err = c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/users/%v/groups/%v", user.UserID, groupId), bytes.NewReader(jsonBody), nil)
+		if err != nil {
+			c.logger.Errorf("Failed to add user to group: %s", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Cx1Client) RemoveUserFromGroup(user *User, groupId string) error {
+	if user.IsInGroup(groupId) {
+		params := map[string]string{
+			"realm":   c.tenant,
+			"userId":  user.UserID,
+			"groupId": groupId,
+		}
+
+		jsonBody, err := json.Marshal(params)
+		if err != nil {
+			c.logger.Errorf("Failed to marshal group params: %s", err)
+			return err
+		}
+
+		_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/groups/%v", user.UserID, groupId), bytes.NewReader(jsonBody), nil)
+		if err != nil {
+			c.logger.Errorf("Failed to remove user from group: %s", err)
+			return err
+		}
+	}
+	return nil
 }

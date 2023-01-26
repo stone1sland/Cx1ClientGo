@@ -1,96 +1,97 @@
 package main
 
 import (
+	"os"
+
 	"github.com/cxpsemea/Cx1ClientGo"
 	log "github.com/sirupsen/logrus"
-	"os"
-//	"time"
+
+	//	"time"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
-	"crypto/tls"
-	"github.com/t-tomalak/logrus-easy-formatter"
+
+	easy "github.com/t-tomalak/logrus-easy-formatter"
 )
 
 func main() {
 	logger := log.New()
-	logger.SetLevel( log.InfoLevel ) 
+	logger.SetLevel(log.InfoLevel)
 	myformatter := &easy.Formatter{}
 	myformatter.TimestampFormat = "2006-01-02 15:04:05.000"
 	myformatter.LogFormat = "[%lvl%][%time%] %msg%\n"
 	logger.SetFormatter(myformatter)
 	logger.SetOutput(os.Stdout)
 
-	logger.Info( "Starting" )
+	logger.Info("Starting")
 
 	base_url := os.Args[1]
 	iam_url := os.Args[2]
 	tenant := os.Args[3]
 	api_key := os.Args[4]
-//	project_name := os.Args[5]
-//	group_name := os.Args[6]
-//	project_repo := os.Args[7]
-//	branch_name := os.Args[8]
-	
-	proxyURL, err := url.Parse( "http://127.0.0.1:8080" )
+	//	project_name := os.Args[5]
+	//	group_name := os.Args[6]
+	//	project_repo := os.Args[7]
+	//	branch_name := os.Args[8]
+
+	proxyURL, err := url.Parse("http://127.0.0.1:8080")
 	transport := &http.Transport{}
 	transport.Proxy = http.ProxyURL(proxyURL)
-	transport.TLSClientConfig = &tls.Config{ InsecureSkipVerify: true, }
-	
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
 	httpClient := &http.Client{}
 	//httpClient.Transport = transport
-	
-	
-	cx1client, err := Cx1ClientGo.NewAPIKeyClient( httpClient, base_url, iam_url, tenant, api_key, logger )
+
+	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
-		log.Error( "Error creating client: " + err.Error() )
-		return 
+		log.Error("Error creating client: " + err.Error())
+		return
 	}
 
 	// no err means that the client is initialized
-	logger.Info( "Client initialized: " + cx1client.String() )
+	logger.Info("Client initialized: " + cx1client.String())
 
-	
 	var scanConfig Cx1ClientGo.ScanConfiguration
 	scanConfig.ScanType = "sast"
 	scanConfig.Values = map[string]string{"incremental": "false", "presetName": "All"}
 
 	var i uint64
 	for i = 1; i <= 100; i++ {
-		group, gerr := cx1client.GetOrCreateGroup( fmt.Sprintf( "Testgroup%d", i ) )
+		group, gerr := cx1client.GetOrCreateGroup(fmt.Sprintf("Testgroup%d", i))
 		if gerr != nil {
-			logger.Errorf( "Failed to get Testgroup%d", i )
+			logger.Errorf("Failed to get Testgroup%d", i)
 			continue
 		}
-		app, aerr := cx1client.GetOrCreateApplication( fmt.Sprintf( "Testapp%d", i ) )
+		app, aerr := cx1client.GetOrCreateApplication(fmt.Sprintf("Testapp%d", i))
 		if aerr != nil {
-			logger.Errorf( "Failed to get Testapp%d", i )
+			logger.Errorf("Failed to get Testapp%d", i)
 			continue
 		}
-		project, perr := cx1client.GetProjectByName( fmt.Sprintf( "Testproject%d", i ) )
+		project, perr := cx1client.GetOrCreateProject(fmt.Sprintf("Testproject%d", i))
 		if perr != nil {
-			logger.Errorf( "Failed to get Testproject%d: %v", i, perr )
+			logger.Errorf("Failed to get Testproject%d: %v", i, perr)
 			continue
 		}
-		app.AssignProject( &project )
-		err = cx1client.SaveApplication( &app )
+		app.AssignProject(&project)
+		err = cx1client.SaveApplication(&app)
 		if err != nil {
-			logger.Errorf( "Failed to save application: %s", err )
+			logger.Errorf("Failed to save application: %s", err)
 		}
 
-		project.AssignGroup( &group )
-		err = cx1client.SaveProject( &project )
+		project.AssignGroup(&group)
+		err = cx1client.SaveProject(&project)
 
 		if err != nil {
-			logger.Errorf( "Failed to save project: %s", err )
+			logger.Errorf("Failed to save project: %s", err)
 		}
 
-		scan, serr := cx1client.ScanProjectGit( project.ProjectID, "https://github.com/michaelkubiaczyk/ssba/", "master", []Cx1ClientGo.ScanConfiguration{ scanConfig }, map[string]string{} )
+		scan, serr := cx1client.ScanProjectGit(project.ProjectID, "https://github.com/michaelkubiaczyk/ssba/", "master", []Cx1ClientGo.ScanConfiguration{scanConfig}, map[string]string{})
 		if serr != nil {
-			logger.Errorf( "Error starting scan: %s", err )
+			logger.Errorf("Error starting scan: %s", err)
 		} else {
-			logger.Infof( "Started scan %v", scan.String() )
-		}			
+			logger.Infof("Started scan %v", scan.String())
+		}
 	}
 
 }
