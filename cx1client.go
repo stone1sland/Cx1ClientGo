@@ -71,109 +71,6 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	return &cli, nil
 }
 
-/*
-func getTokenOIDC(client *http.Client, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (string, error) {
-	login_url := fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant)
-
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", client_id)
-	data.Set("client_secret", client_secret)
-
-	logger.Infof("Authenticating with Cx1 at: %v", login_url)
-
-	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
-	cx1_req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	res, err := client.Do(cx1_req)
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-	defer res.Body.Close()
-
-	resBody, err := io.ReadAll(res.Body)
-
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	var jsonBody map[string]interface{}
-
-	err = json.Unmarshal(resBody, &jsonBody)
-
-	if err == nil {
-		if jsonBody["access_token"] == nil {
-			logger.Errorf("Response does not contain access token: %v", string(resBody))
-			return "", errors.New("Response does not contain access token")
-		} else {
-			return jsonBody["access_token"].(string), nil
-		}
-	} else {
-		logger.Errorf("Error parsing response: %s", err)
-		logger.Tracef("Input was: %s", string(resBody))
-		return "", err
-	}
-}
-
-func getTokenAPIKey(client *http.Client, iam_url string, tenant string, api_key string, logger *logrus.Logger) (string, error) {
-	login_url := fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant)
-
-	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("client_id", "ast-app")
-	data.Set("refresh_token", api_key)
-
-	logger.Infof("Authenticating with Cx1 at: %v", login_url)
-
-	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
-	cx1_req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	res, err := client.Do(cx1_req)
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-	defer res.Body.Close()
-
-	resBody, err := io.ReadAll(res.Body)
-
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	var jsonBody map[string]interface{}
-
-	err = json.Unmarshal(resBody, &jsonBody)
-
-	if err == nil {
-		if jsonBody["access_token"] == nil {
-			logger.Errorf("Response does not contain access token: %v", string(resBody))
-			return "", errors.New("Response does not contain access token")
-		} else {
-			return jsonBody["access_token"].(string), nil
-		}
-	} else {
-		logger.Errorf("Error parsing response: %s", err)
-		logger.Tracef("Input was: %v", string(resBody))
-		return "", err
-	}
-}
-
-func (c *Cx1Client) GetToken() string {
-	return c.authToken
-}*/
-
 func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
 	request, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -219,13 +116,19 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		resBody, _ := io.ReadAll(response.Body)
+		var resBody []byte
+		if response != nil && response.Body != nil {
+			resBody, _ = io.ReadAll(response.Body)
+		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
 		c.logger.Errorf("HTTP request failed with error: %s", err)
 		return resBody, err
 	}
 	if response.StatusCode >= 400 {
-		resBody, _ := io.ReadAll(response.Body)
+		var resBody []byte
+		if response != nil && response.Body != nil {
+			resBody, _ = io.ReadAll(response.Body)
+		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
 		c.logger.Errorf("HTTP response indicates error: %v", response.Status)
 		return resBody, errors.New("HTTP Response: " + response.Status)
