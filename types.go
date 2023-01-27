@@ -9,11 +9,11 @@ import (
 
 type Cx1Client struct {
 	httpClient *http.Client
-	authToken  string
-	baseUrl    string
-	iamUrl     string
-	tenant     string
-	logger     *logrus.Logger
+	//authToken  string
+	baseUrl string
+	iamUrl  string
+	tenant  string
+	logger  *logrus.Logger
 }
 
 type Application struct {
@@ -108,8 +108,8 @@ type ResultsPredicates struct {
 	State        string `json:"state"`
 	Comment      string `json:"comment"`
 	Severity     string `json:"severity"`
-	CreatedBy    string
-	CreatedAt    string
+	CreatedBy    string `json:"createdBy"`
+	CreatedAt    string `json:"createdAt"`
 }
 
 type KeyCloakClient struct {

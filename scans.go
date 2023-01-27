@@ -104,7 +104,7 @@ func (c *Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {
 		return []byte{}, errors.New("Expected location header response not found")
 	}
 
-	c.logger.Infof("Retrieved url: %v", enginelogURL)
+	//c.logger.Tracef("Retrieved url: %v", enginelogURL)
 	data, err := c.sendRequestInternal(http.MethodGet, enginelogURL, nil, nil)
 	if err != nil {
 		c.logger.Errorf("Failed to download logs from %v: %s", enginelogURL, err)
@@ -242,14 +242,18 @@ func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
 		return "", err
 	}
 
-	cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader(fileContents))
+	/*cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader(fileContents))
 	if err != nil {
 		c.logger.Errorf("Error: %s", err)
 		return "", err
 	}
 
 	cx1_req.Header.Add("Content-Type", "application/zip")
-	cx1_req.Header.Add("Authorization", fmt.Sprintf("Bearer %v", c.authToken))
+	cx1_req.Header.Add("Authorization", fmt.Sprintf("Bearer %v", c.authToken))*/
+	header := http.Header{}
+	header.Add("Content-Type", "application/zip")
+
+	cx1_req, err := c.createRequest(http.MethodPut, URL, bytes.NewReader(fileContents), &header, nil)
 	cx1_req.ContentLength = int64(len(fileContents))
 
 	res, err := c.httpClient.Do(cx1_req)

@@ -2,17 +2,18 @@ package Cx1ClientGo
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
 	"io"
+	"time"
 
 	//"io/ioutil"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 var cxOrigin = "Cx1-Golang-Client"
@@ -24,129 +25,50 @@ func init() {
 
 // Main entry for users of this client:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
-	token, err := getTokenOIDC(client, iam_url, tenant, client_id, client_secret, logger)
-	if err != nil {
-		return nil, err
+	ctx := context.Background()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
+
+	conf := &clientcredentials.Config{
+		ClientID:     client_id,
+		ClientSecret: client_secret,
+		TokenURL:     fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant),
 	}
 
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+	oauthclient := conf.Client(ctx)
 
-	cli := Cx1Client{client, token, base_url, iam_url, tenant, logger}
+	cli := Cx1Client{oauthclient, base_url, iam_url, tenant, logger}
 	return &cli, nil
 }
 
 func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
-	token, err := getTokenAPIKey(client, iam_url, tenant, api_key, logger)
+	ctx := context.Background()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
+
+	conf := &oauth2.Config{
+		ClientID: "ast-app",
+		Endpoint: oauth2.Endpoint{
+			TokenURL: fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant),
+		},
+	}
+
+	refreshToken := &oauth2.Token{
+		AccessToken:  "",
+		RefreshToken: api_key,
+		Expiry:       time.Now().UTC(),
+	}
+
+	token, err := conf.TokenSource(ctx, refreshToken).Token()
 	if err != nil {
+		fmt.Printf("Error: %s\n", err)
 		return nil, err
 	}
 
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+	oauthclient := conf.Client(ctx, token)
 
-	cli := Cx1Client{client, token, base_url, iam_url, tenant, logger}
+	cli := Cx1Client{oauthclient, base_url, iam_url, tenant, logger}
 	return &cli, nil
-}
-
-func getTokenOIDC(client *http.Client, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (string, error) {
-	login_url := fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant)
-
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", client_id)
-	data.Set("client_secret", client_secret)
-
-	logger.Infof("Authenticating with Cx1 at: %v", login_url)
-
-	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
-	cx1_req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	res, err := client.Do(cx1_req)
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-	defer res.Body.Close()
-
-	resBody, err := io.ReadAll(res.Body)
-
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	var jsonBody map[string]interface{}
-
-	err = json.Unmarshal(resBody, &jsonBody)
-
-	if err == nil {
-		if jsonBody["access_token"] == nil {
-			logger.Errorf("Response does not contain access token: %v", string(resBody))
-			return "", errors.New("Response does not contain access token")
-		} else {
-			return jsonBody["access_token"].(string), nil
-		}
-	} else {
-		logger.Errorf("Error parsing response: %s", err)
-		logger.Tracef("Input was: %s", string(resBody))
-		return "", err
-	}
-}
-
-func getTokenAPIKey(client *http.Client, iam_url string, tenant string, api_key string, logger *logrus.Logger) (string, error) {
-	login_url := fmt.Sprintf("%v/auth/realms/%v/protocol/openid-connect/token", iam_url, tenant)
-
-	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("client_id", "ast-app")
-	data.Set("refresh_token", api_key)
-
-	logger.Infof("Authenticating with Cx1 at: %v", login_url)
-
-	cx1_req, err := http.NewRequest(http.MethodPost, login_url, strings.NewReader(data.Encode()))
-	cx1_req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	res, err := client.Do(cx1_req)
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-	defer res.Body.Close()
-
-	resBody, err := io.ReadAll(res.Body)
-
-	if err != nil {
-		logger.Errorf("Error: %s", err)
-		return "", err
-	}
-
-	var jsonBody map[string]interface{}
-
-	err = json.Unmarshal(resBody, &jsonBody)
-
-	if err == nil {
-		if jsonBody["access_token"] == nil {
-			logger.Errorf("Response does not contain access token: %v", string(resBody))
-			return "", errors.New("Response does not contain access token")
-		} else {
-			return jsonBody["access_token"].(string), nil
-		}
-	} else {
-		logger.Errorf("Error parsing response: %s", err)
-		logger.Tracef("Input was: %v", string(resBody))
-		return "", err
-	}
-}
-
-func (c *Cx1Client) GetToken() string {
-	return c.authToken
 }
 
 func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
@@ -161,7 +83,7 @@ func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *ht
 		}
 	}
 
-	request.Header.Set("Authorization", fmt.Sprintf("Bearer %v", c.authToken))
+	//request.Header.Set("Authorization", fmt.Sprintf("Bearer %v", c.authToken))
 	if request.Header.Get("User-Agent") == "" {
 		request.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0")
 	}
@@ -194,13 +116,19 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		resBody, _ := io.ReadAll(response.Body)
+		var resBody []byte
+		if response != nil && response.Body != nil {
+			resBody, _ = io.ReadAll(response.Body)
+		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
 		c.logger.Errorf("HTTP request failed with error: %s", err)
 		return resBody, err
 	}
 	if response.StatusCode >= 400 {
-		resBody, _ := io.ReadAll(response.Body)
+		var resBody []byte
+		if response != nil && response.Body != nil {
+			resBody, _ = io.ReadAll(response.Body)
+		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
 		c.logger.Errorf("HTTP response indicates error: %v", response.Status)
 		return resBody, errors.New("HTTP Response: " + response.Status)
@@ -311,7 +239,7 @@ func (c *Cx1Client) GetASTAppID() string {
 }
 
 func (c *Cx1Client) String() string {
-	return fmt.Sprintf("%v on %v with token: %v", c.tenant, c.baseUrl, ShortenGUID(c.authToken))
+	return fmt.Sprintf("%v on %v ", c.tenant, c.baseUrl)
 }
 
 func ShortenGUID(guid string) string {
