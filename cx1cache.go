@@ -2,6 +2,7 @@ package Cx1ClientGo
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -264,11 +265,14 @@ func (c *Cx1Cache) GetQuery(queryID uint64) (*Query, error) {
 	return nil, errors.New("No such query")
 }
 func (c *Cx1Cache) GetQueryByNames(language, group, query string) (*Query, error) {
-	/*for _, g := range c.Queries {
-	      if g.QueryID == queryID {
-	          return g, nil
-	      }
-	  }
-	  return nil, errors.New( "No such query" )*/
-	return nil, errors.New("Not implemented")
+	l := strings.ToUpper(language)
+	g := strings.ToUpper(group)
+	q := strings.ToUpper(query)
+
+	for id, t := range c.Queries {
+		if strings.ToUpper(t.Language) == l && strings.ToUpper(t.Group) == g && strings.ToUpper(t.Name) == q {
+			return &c.Queries[id], nil
+		}
+	}
+	return nil, errors.New("No such query")
 }

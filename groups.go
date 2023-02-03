@@ -33,6 +33,35 @@ func (c *Cx1Client) CreateGroup(groupname string) (Group, error) {
 	return c.GetGroupByName(groupname)
 }
 
+func (c *Cx1Client) GetGroupsPIP() ([]Group, error) {
+	c.logger.Debug("Get cx1 groups pip")
+	var groups []Group
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth", "/pip/groups", nil, nil)
+	if err != nil {
+		return groups, err
+	}
+
+	err = json.Unmarshal(response, &groups)
+	return groups, err
+}
+
+func (c *Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
+	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
+
+	groups, err := c.GetGroupsPIP()
+	if err != nil {
+		return Group{}, err
+	}
+
+	for _, g := range groups {
+		if g.Name == groupname {
+			return g, nil
+		}
+	}
+
+	return Group{}, errors.New("No such group found")
+}
+
 func (c *Cx1Client) GetGroups() ([]Group, error) {
 	c.logger.Debug("Get Cx1 Groups")
 	var groups []Group

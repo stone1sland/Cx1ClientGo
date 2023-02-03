@@ -40,10 +40,13 @@ type Group struct {
 }
 
 type Preset struct {
-	PresetID uint64 `json:"id"`
-	Name     string `json:"name"`
-	Filled   bool
-	Queries  []Query
+	PresetID    uint64 `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Custom      bool   `json:"custom"`
+	QueryIDs    []uint64
+	Filled      bool
+	Queries     []Query
 }
 
 type Project struct {
