@@ -173,10 +173,10 @@ func main() {
 	
 	err = os.WriteFile( "report.pdf", reportData, 0o700 )
 	if err != nil {
-		logger.Errorf( "Failed to save report: %s", err )
+		logger.Errorf( "Failed to Update report: %s", err )
 		return
 	}
-	logger.Info( "Report saved to report.pdf" )
+	logger.Info( "Report Updated to report.pdf" )
 	
 	scanresults, err := cx1client.GetScanResults( scan.ScanID )
 	if err != nil && len(scanresults) == 0 {

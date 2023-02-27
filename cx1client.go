@@ -3,6 +3,7 @@ package Cx1ClientGo
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -10,7 +11,6 @@ import (
 	//"io/ioutil"
 	"net/http"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -25,6 +25,10 @@ func init() {
 
 // Main entry for users of this client:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
+	if base_url == "" || iam_url == "" || tenant == "" || client_id == "" || client_secret == "" || logger == nil {
+		return nil, fmt.Errorf("unable to create client: invalid parameters provided")
+	}
+
 	ctx := context.Background()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, client)
@@ -96,7 +100,7 @@ func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *ht
 }
 
 func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
-	var requestBody io.Reader
+	/*var requestBody io.Reader
 	var bodyBytes []byte
 
 	c.logger.Debugf("Sending request to URL %v", url)
@@ -110,7 +114,7 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 
 	request, err := c.createRequest(method, url, requestBody, &header, nil)
 	if err != nil {
-		c.logger.Errorf("Unable to create request: %s", err)
+		c.logger.Tracef("Unable to create request: %s", err)
 		return []byte{}, err
 	}
 
@@ -121,7 +125,7 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 			resBody, _ = io.ReadAll(response.Body)
 		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-		c.logger.Errorf("HTTP request failed with error: %s", err)
+		c.logger.Tracef("HTTP request failed with error: %s", err)
 		return resBody, err
 	}
 	if response.StatusCode >= 400 {
@@ -130,23 +134,17 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 			resBody, _ = io.ReadAll(response.Body)
 		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-		c.logger.Errorf("HTTP response indicates error: %v", response.Status)
-		return resBody, errors.New("HTTP Response: " + response.Status)
+		c.logger.Tracef("HTTP response indicates error: %v", response.Status)
+		return resBody, fmt.Errorf("HTTP Response: " + response.Status)
+	}*/
+	response, err := c.sendRequestRaw(method, url, body, header)
+	var resBody []byte
+	if response != nil && response.Body != nil {
+		resBody, _ = io.ReadAll(response.Body)
+		response.Body.Close()
 	}
 
-	resBody, err := io.ReadAll(response.Body)
-
-	if err != nil {
-		if err.Error() == "remote error: tls: user canceled" {
-			c.logger.Warnf("HTTP request encountered error: %s", err)
-			return resBody, nil
-		} else {
-			c.logger.Errorf("Error reading response body: %s", err)
-		}
-		c.logger.Tracef("Parsed: %v", string(resBody))
-	}
-
-	return resBody, nil
+	return resBody, err
 }
 
 func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
@@ -164,25 +162,52 @@ func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header ht
 
 	request, err := c.createRequest(method, url, requestBody, &header, nil)
 	if err != nil {
-		c.logger.Errorf("Unable to create request: %s", err)
+		c.logger.Tracef("Unable to create request: %s", err)
 		return nil, err
 	}
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
+		c.logger.Tracef("Failed HTTP request: %s", err)
 		var resBody []byte
 		if response.Body != nil {
 			resBody, _ = io.ReadAll(response.Body)
 		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-		c.logger.Errorf("HTTP request failed with error: %s", err)
-		return nil, err
+
+		return response, err
 	}
 	if response.StatusCode >= 400 {
 		resBody, _ := io.ReadAll(response.Body)
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-		c.logger.Errorf("HTTP response indicates error: %v", response.Status)
-		return nil, errors.New("HTTP Response: " + response.Status)
+		var msg map[string]interface{}
+		err = json.Unmarshal(resBody, &msg)
+		if err == nil {
+			var str string
+			if msg["message"] != nil {
+				str = msg["message"].(string)
+			} else if msg["error_description"] != nil {
+				str = msg["error_description"].(string)
+			} else if msg["error"] != nil {
+				str = msg["error"].(string)
+			} else if msg["errorMessage"] != nil {
+				str = msg["errorMessage"].(string)
+			} else {
+				if len(str) > 20 {
+					str = string(resBody)[:20]
+				} else {
+					str = string(resBody)
+				}
+			}
+			return response, fmt.Errorf("HTTP %v: %v", response.Status, str)
+		} else {
+			str := string(resBody)
+			if len(str) > 20 {
+				str = str[:20]
+			}
+			return response, fmt.Errorf("HTTP %v: %s", response.Status, str)
+		}
+		//return response, fmt.Errorf("HTTP Response: " + response.Status)
 	}
 
 	return response, nil
@@ -216,10 +241,10 @@ func (c *Cx1Client) sendRequestOther(method, base, url string, body io.Reader, h
 
 func (c *Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte) {
 	if len(requestBody) != 0 {
-		c.logger.Errorf("Request body: %s", string(requestBody))
+		c.logger.Tracef("Request body: %s", string(requestBody))
 	}
 	if len(responseBody) != 0 {
-		c.logger.Errorf("Response body: %s", string(responseBody))
+		c.logger.Tracef("Response body: %s", string(responseBody))
 	}
 }
 

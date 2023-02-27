@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/pkg/errors"
 )
 
 func (g *Group) String() string {
@@ -26,7 +24,7 @@ func (c *Cx1Client) CreateGroup(groupname string) (Group, error) {
 
 	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups", bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		c.logger.Errorf("Error creating group: %s", err)
+		c.logger.Tracef("Error creating group %v: %s", groupname, err)
 		return Group{}, err
 	}
 
@@ -59,7 +57,7 @@ func (c *Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
 		}
 	}
 
-	return Group{}, errors.New("No such group found")
+	return Group{}, fmt.Errorf("no such group %v found", groupname)
 }
 
 func (c *Cx1Client) GetGroups() ([]Group, error) {
@@ -86,7 +84,7 @@ func (c *Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	err = json.Unmarshal(response, &groups)
 
 	if err != nil {
-		c.logger.Errorf("Error retrieving group: %s", err)
+		c.logger.Tracef("Error retrieving group %v: %s", groupname, err)
 		return Group{}, err
 	}
 
@@ -96,10 +94,33 @@ func (c *Cx1Client) GetGroupByName(groupname string) (Group, error) {
 		if groups[i].Name == groupname {
 			match := groups[i]
 			return match, nil
+		} else {
+			subg, err := groups[i].FindSubgroupByName(groupname)
+			if err == nil {
+				return subg, nil
+			}
 		}
 	}
 
-	return Group{}, errors.New("No matching group found")
+	return Group{}, fmt.Errorf("no group %v found", groupname)
+}
+
+func (c *Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
+	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=true&search=%v", url.PathEscape(groupname)), nil, nil)
+	if err != nil {
+		return []Group{}, err
+	}
+	var groups []Group
+	err = json.Unmarshal(response, &groups)
+	return groups, err
+}
+
+func (c *Cx1Client) DeleteGroup(group *Group) error {
+	c.logger.Debugf("Deleting Group %v...", group.String())
+
+	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/groups/%v", group.GroupID), nil, http.Header{})
+	return err
 }
 
 func (c *Cx1Client) GetGroupByID(groupID string) (Group, error) {
@@ -112,7 +133,7 @@ func (c *Cx1Client) GetGroupByID(groupID string) (Group, error) {
 
 	data, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups/%v?%v", groupID, body.Encode()), nil, http.Header{})
 	if err != nil {
-		c.logger.Errorf("Fetching group failed: %s", err)
+		c.logger.Tracef("Fetching group %v failed: %s", groupID, err)
 		return group, err
 	}
 
@@ -122,6 +143,21 @@ func (c *Cx1Client) GetGroupByID(groupID string) (Group, error) {
 
 func (c *Cx1Client) GroupLink(g *Group) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID)
+}
+
+func (c *Cx1Client) SetGroupParent(g *Group, parent *Group) error {
+	body := map[string]string{
+		"id":   g.GroupID,
+		"name": g.Name,
+	}
+	jsonBody, _ := json.Marshal(body)
+	_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/children", parent.GroupID), bytes.NewReader(jsonBody), http.Header{})
+	if err != nil {
+		c.logger.Tracef("Failed to add child to parent: %s", err)
+		return err
+	}
+
+	return nil
 }
 
 // convenience
@@ -135,4 +171,19 @@ func (c *Cx1Client) GetOrCreateGroup(name string) (Group, error) {
 	}
 
 	return group, nil
+}
+
+func (g *Group) FindSubgroupByName(name string) (Group, error) {
+	for _, s := range g.SubGroups {
+		if s.Name == name {
+			return s, nil
+		} else {
+			subg, err := s.FindSubgroupByName(name)
+			if err == nil {
+				return subg, nil
+			}
+		}
+	}
+
+	return Group{}, fmt.Errorf("group %v does not contain subgroup named %v", g.String(), name)
 }

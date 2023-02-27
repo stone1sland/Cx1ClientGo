@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 func (r *Role) String() string {
@@ -91,12 +89,12 @@ func (c *Cx1Client) CreateASTRole(roleName, createdBy string) (Role, error) {
 	}
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
-		c.logger.Errorf("Failed to marshal data somehow: %s", err)
+		c.logger.Tracef("Failed to marshal data somehow: %s", err)
 		return Role{}, err
 	}
 	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/clients/%v/roles", c.GetASTAppID()), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		c.logger.Errorf("Failed to create a client role: %s", err)
+		c.logger.Tracef("Failed to create a client role %v: %s", roleName, err)
 		return Role{}, err
 	}
 
@@ -140,7 +138,7 @@ func (c *Cx1Client) GetCombinedRoleByName(name string) (Role, error) {
 		return role, nil
 	}
 
-	return Role{}, errors.New("Role not found")
+	return Role{}, fmt.Errorf("Role %v not found", name)
 }
 
 func (c *Cx1Client) RoleLink(r *Role) string {
