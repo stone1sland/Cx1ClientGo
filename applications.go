@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // Applications
@@ -37,7 +35,7 @@ func (c *Cx1Client) GetApplications(limit uint) ([]Application, error) {
 	return ApplicationResponse.Applications, err
 }
 
-func (c *Cx1Client) GetApplicationsByName(name string, limit uint) ([]Application, error) {
+func (c *Cx1Client) GetApplicationsByName(name string, limit uint64) ([]Application, error) {
 	c.logger.Debugf("Get Cx1 Applications by name: %v", name)
 
 	var ApplicationResponse struct {
@@ -75,7 +73,7 @@ func (c *Cx1Client) GetApplicationByName(name string) (Application, error) {
 		}
 	}
 
-	return Application{}, errors.New(fmt.Sprintf("No application found named %v", name))
+	return Application{}, fmt.Errorf("no application found named %v", name)
 }
 
 func (c *Cx1Client) CreateApplication(appname string) (Application, error) {
@@ -97,7 +95,7 @@ func (c *Cx1Client) CreateApplication(appname string) (Application, error) {
 
 	response, err := c.sendRequest(http.MethodPost, "/applications", bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		c.logger.Errorf("Error while creating application: %s", err)
+		c.logger.Tracef("Error while creating application: %s", err)
 		return app, err
 	}
 
@@ -111,7 +109,7 @@ func (c *Cx1Client) DeleteApplication(applicationId string) error {
 
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/applications/%v", applicationId), nil, nil)
 	if err != nil {
-		c.logger.Errorf("Error while deleting application: %s", err)
+		c.logger.Tracef("Error while deleting application: %s", err)
 		return err
 	}
 
@@ -178,8 +176,8 @@ func (c *Cx1Client) GetOrCreateApplication(name string) (Application, error) {
 	return c.CreateApplication(name)
 }
 
-func (c *Cx1Client) SaveApplication(app *Application) error {
-	c.logger.Debugf("Save application: %v", app.String())
+func (c *Cx1Client) UpdateApplication(app *Application) error {
+	c.logger.Debugf("Update application: %v", app.String())
 	jsonBody, err := json.Marshal(*app)
 	if err != nil {
 		return err
@@ -187,7 +185,7 @@ func (c *Cx1Client) SaveApplication(app *Application) error {
 
 	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/applications/%v", app.ApplicationID), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		c.logger.Errorf("Error while updating application: %s", err)
+		c.logger.Tracef("Error while updating application: %s", err)
 		return err
 	}
 

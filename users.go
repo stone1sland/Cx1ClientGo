@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 func (c *Cx1Client) GetCurrentUser() (User, error) {
@@ -79,10 +77,10 @@ func (c *Cx1Client) GetUserByUserName(name string) (User, error) {
 		return User{}, err
 	}
 	if len(users) == 0 {
-		return User{}, errors.New("No user found")
+		return User{}, fmt.Errorf("no user %v found", name)
 	}
 	if len(users) > 1 {
-		return User{}, errors.New("Too many users match")
+		return User{}, fmt.Errorf("too many users (%d) match %v", len(users), name)
 	}
 	return users[0], err
 }
@@ -92,7 +90,7 @@ func (c *Cx1Client) CreateUser(newuser User) (User, error) {
 	newuser.UserID = ""
 	jsonBody, err := json.Marshal(newuser)
 	if err != nil {
-		c.logger.Errorf("Failed to marshal data somehow: %s", err)
+		c.logger.Tracef("Failed to marshal data somehow: %s", err)
 		return User{}, err
 	}
 
@@ -108,15 +106,15 @@ func (c *Cx1Client) CreateUser(newuser User) (User, error) {
 		c.logger.Infof(" New user ID: %v", guid)
 		return c.GetUserByID(guid)
 	} else {
-		return User{}, errors.New("Unknown error - no Location header redirect in response")
+		return User{}, fmt.Errorf("unknown error - no Location header redirect in response")
 	}
 }
 
-func (c *Cx1Client) SaveUser(user *User) error {
+func (c *Cx1Client) UpdateUser(user *User) error {
 	c.logger.Debugf("Updating user %v", user.String())
 	jsonBody, err := json.Marshal(user)
 	if err != nil {
-		c.logger.Errorf("Failed to marshal data somehow: %s", err)
+		c.logger.Tracef("Failed to marshal data somehow: %s", err)
 		return err
 	}
 
@@ -129,7 +127,7 @@ func (c *Cx1Client) DeleteUser(userid string) error {
 
 	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v", userid), nil, nil)
 	if err != nil {
-		c.logger.Errorf("Failed to delete user: %s", err)
+		c.logger.Tracef("Failed to delete user: %s", err)
 		return err
 	}
 	return nil
@@ -156,7 +154,7 @@ func (c *Cx1Client) AddUserRoleMappings(userID string, clientID string, roles []
 
 	jsonBody, err := json.Marshal(roles)
 	if err != nil {
-		c.logger.Errorf("Failed to marshal roles: %s", err)
+		c.logger.Tracef("Failed to marshal roles: %s", err)
 		return err
 	}
 
@@ -173,7 +171,7 @@ func (c *Cx1Client) RemoveUserRoleMappings(userID string, clientID string, roles
 
 	jsonBody, err := json.Marshal(roles)
 	if err != nil {
-		c.logger.Errorf("Failed to marshal roles: %s", err)
+		c.logger.Tracef("Failed to marshal roles: %s", err)
 		return err
 	}
 
@@ -200,7 +198,7 @@ func (c *Cx1Client) GetUserGroups(user *User) error {
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/groups", user.UserID), nil, nil)
 
 	if err != nil {
-		c.logger.Errorf("Failed to fetch user's groups: %s", err)
+		c.logger.Tracef("Failed to fetch user's groups: %s", err)
 		return err
 	}
 
@@ -208,7 +206,7 @@ func (c *Cx1Client) GetUserGroups(user *User) error {
 
 	err = json.Unmarshal(response, &usergroups)
 	if err != nil {
-		c.logger.Errorf("Failed to unmarshal response: %s", err)
+		c.logger.Tracef("Failed to unmarshal response: %s", err)
 		return err
 	}
 
@@ -242,13 +240,13 @@ func (c *Cx1Client) AssignUserToGroup(user *User, groupId string) error {
 
 		jsonBody, err := json.Marshal(params)
 		if err != nil {
-			c.logger.Errorf("Failed to marshal group params: %s", err)
+			c.logger.Tracef("Failed to marshal group params: %s", err)
 			return err
 		}
 
 		_, err = c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/users/%v/groups/%v", user.UserID, groupId), bytes.NewReader(jsonBody), nil)
 		if err != nil {
-			c.logger.Errorf("Failed to add user to group: %s", err)
+			c.logger.Tracef("Failed to add user to group: %s", err)
 			return err
 		}
 	}
@@ -265,13 +263,13 @@ func (c *Cx1Client) RemoveUserFromGroup(user *User, groupId string) error {
 
 		jsonBody, err := json.Marshal(params)
 		if err != nil {
-			c.logger.Errorf("Failed to marshal group params: %s", err)
+			c.logger.Tracef("Failed to marshal group params: %s", err)
 			return err
 		}
 
 		_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/groups/%v", user.UserID, groupId), bytes.NewReader(jsonBody), nil)
 		if err != nil {
-			c.logger.Errorf("Failed to remove user from group: %s", err)
+			c.logger.Tracef("Failed to remove user from group: %s", err)
 			return err
 		}
 	}

@@ -9,8 +9,6 @@ import (
 	"net/url"
 	"os"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // Scans
@@ -21,8 +19,8 @@ func (c *Cx1Client) GetScan(scanID string) (Scan, error) {
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans/%v", scanID), nil, nil)
 	if err != nil {
-		c.logger.Errorf("Failed to fetch scan with ID %v: %s", scanID, err)
-		return scan, errors.Wrapf(err, "failed to fetch scan with ID %v", scanID)
+		c.logger.Tracef("Failed to fetch scan with ID %v: %s", scanID, err)
+		return scan, fmt.Errorf("failed to fetch scan with ID %v: %s", scanID, err)
 	}
 
 	json.Unmarshal([]byte(data), &scan)
@@ -34,8 +32,8 @@ func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-metadata/%v", scanID), nil, http.Header{})
 	if err != nil {
-		c.logger.Errorf("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
-		return scanmeta, errors.Wrapf(err, "failed to fetch metadata for scan with ID %v", scanID)
+		c.logger.Tracef("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
+		return scanmeta, fmt.Errorf("failed to fetch metadata for scan with ID %v: %s", scanID, err)
 	}
 
 	json.Unmarshal(data, &scanmeta)
@@ -68,8 +66,8 @@ func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scan-summary/?%v", params.Encode()), nil, http.Header{})
 	if err != nil {
-		c.logger.Errorf("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
-		return ScanSummary{}, errors.Wrapf(err, "failed to fetch metadata for scan with ID %v", scanID)
+		c.logger.Tracef("Failed to fetch metadata for scan with ID %v: %s", scanID, err)
+		return ScanSummary{}, fmt.Errorf("failed to fetch metadata for scan with ID %v: %s", scanID, err)
 	}
 
 	err = json.Unmarshal(data, &ScansSummaries)
@@ -78,12 +76,12 @@ func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
 		return ScanSummary{}, err
 	}
 	if ScansSummaries.TotalCount == 0 {
-		return ScanSummary{}, errors.New(fmt.Sprintf("Failed to retrieve scan summary for scan ID %v", scanID))
+		return ScanSummary{}, fmt.Errorf("failed to retrieve scan summary for scan ID %v", scanID)
 	}
 
 	if len(ScansSummaries.ScanSum) == 0 {
-		c.logger.Errorf("Failed to parse data, 0-len ScanSum.\n%v", string(data))
-		return ScanSummary{}, errors.New("Fail")
+		c.logger.Tracef("Failed to parse data, 0-len ScanSum.\n%v", string(data))
+		return ScanSummary{}, fmt.Errorf("Fail")
 	}
 
 	return ScansSummaries.ScanSum[0], nil
@@ -95,19 +93,19 @@ func (c *Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {
 	response, err := c.sendRequestRawCx1(http.MethodGet, fmt.Sprintf("/logs/%v/%v", scanID, engine), nil, nil)
 
 	if err != nil {
-		c.logger.Errorf("Error retrieving scanlog url: %s", err)
+		c.logger.Tracef("Error retrieving scanlog url: %s", err)
 		return []byte{}, err
 	}
 
 	enginelogURL := response.Header.Get("Location")
 	if enginelogURL == "" {
-		return []byte{}, errors.New("Expected location header response not found")
+		return []byte{}, fmt.Errorf("expected location header response not found")
 	}
 
 	//c.logger.Tracef("Retrieved url: %v", enginelogURL)
 	data, err := c.sendRequestInternal(http.MethodGet, enginelogURL, nil, nil)
 	if err != nil {
-		c.logger.Errorf("Failed to download logs from %v: %s", enginelogURL, err)
+		c.logger.Tracef("Failed to download logs from %v: %s", enginelogURL, err)
 		return []byte{}, nil
 	}
 
@@ -145,7 +143,7 @@ func (c *Cx1Client) ScanProjectZip(projectID, sourceUrl, branch string, settings
 
 	scan, err := c.scanProject(jsonBody)
 	if err != nil {
-		return scan, errors.Wrapf(err, "Failed to start a zip scan for project %v", projectID)
+		return scan, fmt.Errorf("failed to start a zip scan for project %v: %s", projectID, err)
 	}
 	return scan, err
 }
@@ -164,7 +162,7 @@ func (c *Cx1Client) ScanProjectGit(projectID, repoUrl, branch string, settings [
 
 	scan, err := c.scanProject(jsonBody)
 	if err != nil {
-		return scan, errors.Wrapf(err, "Failed to start a git scan for project %v", projectID)
+		return scan, fmt.Errorf("failed to start a git scan for project %v: %s", projectID, err)
 	}
 	return scan, err
 }
@@ -177,7 +175,7 @@ func (c *Cx1Client) ScanProject(projectID, sourceUrl, branch, scanType string, s
 		return c.ScanProjectGit(projectID, sourceUrl, branch, settings, tags)
 	}
 
-	return Scan{}, errors.New("Invalid scanType provided, must be 'upload' or 'git'")
+	return Scan{}, fmt.Errorf("invalid scanType provided, must be 'upload' or 'git'")
 }
 
 // convenience function
@@ -189,7 +187,7 @@ func (s *Scan) IsIncremental() (bool, error) {
 			}
 		}
 	}
-	return false, errors.New(fmt.Sprintf("Scan %v did not have a sast-engine incremental flag set", s.ScanID))
+	return false, fmt.Errorf(fmt.Sprintf("Scan %v did not have a sast-engine incremental flag set", s.ScanID))
 }
 
 // convenience
@@ -201,7 +199,7 @@ func (c *Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 		time.Sleep(10 * time.Second)
 		scan, err = c.GetScan(scan.ScanID)
 		if err != nil {
-			c.logger.Errorf("Failed to get scan status: %v", err)
+			c.logger.Tracef("Failed to get scan status: %v", err)
 			return scan, err
 		}
 		c.logger.Infof(" - %v", scan.Status)
@@ -217,7 +215,7 @@ func (c *Cx1Client) GetUploadURL() (string, error) {
 	response, err := c.sendRequest(http.MethodPost, "/uploads", nil, nil)
 
 	if err != nil {
-		c.logger.Errorf("Unable to get Upload URL: %s", err)
+		c.logger.Tracef("Unable to get Upload URL: %s", err)
 		return "", err
 	}
 
@@ -225,7 +223,7 @@ func (c *Cx1Client) GetUploadURL() (string, error) {
 
 	err = json.Unmarshal(response, &jsonBody)
 	if err != nil {
-		c.logger.Errorf("Error: %s", err)
+		c.logger.Tracef("Error: %s", err)
 		c.logger.Tracef("Input was: %s", string(response))
 		return "", err
 	} else {
@@ -238,13 +236,13 @@ func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
 
 	fileContents, err := os.ReadFile(filename)
 	if err != nil {
-		c.logger.Errorf("Failed to Read the File %v: %s", filename, err)
+		c.logger.Tracef("Failed to Read the File %v: %s", filename, err)
 		return "", err
 	}
 
 	/*cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader(fileContents))
 	if err != nil {
-		c.logger.Errorf("Error: %s", err)
+		c.logger.Tracef("Error: %s", err)
 		return "", err
 	}
 
@@ -254,11 +252,14 @@ func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
 	header.Add("Content-Type", "application/zip")
 
 	cx1_req, err := c.createRequest(http.MethodPut, URL, bytes.NewReader(fileContents), &header, nil)
+	if err != nil {
+		return "", err
+	}
 	cx1_req.ContentLength = int64(len(fileContents))
 
 	res, err := c.httpClient.Do(cx1_req)
 	if err != nil {
-		c.logger.Errorf("Error: %s", err)
+		c.logger.Tracef("Error: %s", err)
 		return "", err
 	}
 	defer res.Body.Close()
@@ -266,7 +267,7 @@ func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
 	resBody, err := io.ReadAll(res.Body)
 
 	if err != nil {
-		c.logger.Errorf("Error: %s", err)
+		c.logger.Tracef("Error: %s", err)
 		return "", err
 	}
 

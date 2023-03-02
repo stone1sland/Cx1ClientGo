@@ -25,13 +25,13 @@ func (c *Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, e
 
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil)
 	if err != nil && len(response) == 0 {
-		c.logger.Errorf("Failed to retrieve scan results for scan ID %v", scanID)
+		c.logger.Tracef("Failed to retrieve scan results for scan ID %v", scanID)
 		return []ScanResult{}, err
 	}
 
 	err = json.Unmarshal(response, &resultResponse)
 	if err != nil {
-		c.logger.Errorf("Failed while parsing response: %s", err)
+		c.logger.Tracef("Failed while parsing response: %s", err)
 		c.logger.Tracef("Response contents: %s", string(response))
 		return []ScanResult{}, err
 	}
@@ -45,13 +45,43 @@ func (c *Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, e
 	return resultResponse.Results, nil
 }
 
+func (c *Cx1Client) GetScanResultsCount(scanID string) (uint64, error) {
+	c.logger.Debug("Get Cx1 Scan Results")
+	var resultResponse struct {
+		//Results    []ScanResult
+		TotalCount uint64
+	}
+
+	params := url.Values{
+		"scan-id":  {scanID},
+		"limit":    {fmt.Sprintf("%d", 0)},
+		"state":    []string{},
+		"severity": []string{},
+		"status":   []string{},
+	}
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil)
+	if err != nil && len(response) == 0 {
+		c.logger.Tracef("Failed to retrieve scan results for scan ID %v", scanID)
+		return 0, err
+	}
+
+	err = json.Unmarshal(response, &resultResponse)
+	if err != nil {
+		c.logger.Tracef("Failed while parsing response: %s", err)
+		c.logger.Tracef("Response contents: %s", string(response))
+		return 0, err
+	}
+	return resultResponse.TotalCount, nil
+}
+
 // results
 func (c *Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
 	c.logger.Debugf("Adding %d results predicates", len(predicates))
 
 	jsonBody, err := json.Marshal(predicates)
 	if err != nil {
-		c.logger.Errorf("Failed to add results predicates: %s", err)
+		c.logger.Tracef("Failed to add results predicates: %s", err)
 		return err
 	}
 

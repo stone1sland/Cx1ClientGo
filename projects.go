@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/pkg/errors"
 )
 
 // Projects
@@ -36,7 +34,7 @@ func (c *Cx1Client) CreateProject(projectname string, cx1_group_ids []string, ta
 	var project Project
 	response, err := c.sendRequest(http.MethodPost, "/projects", bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		c.logger.Errorf("Error while creating project: %s", err)
+		c.logger.Tracef("Error while creating project %v: %s", projectname, err)
 		return project, err
 	}
 
@@ -91,7 +89,7 @@ func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/projects/%v", projectID), nil, nil)
 	if err != nil {
-		return project, errors.Wrapf(err, "fetching project %v failed", projectID)
+		return project, fmt.Errorf("failed to fetch project %v: %s", projectID, err)
 	}
 
 	err = json.Unmarshal([]byte(data), &project)
@@ -115,7 +113,7 @@ func (c *Cx1Client) GetProjectByName(projectname string) (Project, error) {
 		}
 	}
 
-	return Project{}, errors.New("No matching project found")
+	return Project{}, fmt.Errorf("no project matching %v found", projectname)
 }
 
 func (c *Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Project, error) {
@@ -140,7 +138,7 @@ func (c *Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Proje
 
 	err = json.Unmarshal(response, &ProjectResponse)
 	if err != nil {
-		c.logger.Errorf("Error getting project: %s", err)
+		c.logger.Tracef("Error getting project: %s", err)
 		c.logger.Tracef("Failed to unmarshal: %v", string(response))
 		return ProjectResponse.Projects, err
 	}
@@ -176,7 +174,7 @@ func (c *Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string
 		data, err = c.sendRequest(http.MethodGet, "/projects/", nil, nil)
 	}
 	if err != nil {
-		return projectResponse.Projects, errors.Wrapf(err, "fetching project %v failed", projectName)
+		return projectResponse.Projects, fmt.Errorf("fetching project %v failed: %s", projectName, err)
 	}
 
 	err = json.Unmarshal(data, &projectResponse)
@@ -204,7 +202,7 @@ func (c *Cx1Client) GetProjectConfiguration(projectID string) ([]ProjectConfigur
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/configuration/project?%v", params.Encode()), nil, nil)
 
 	if err != nil {
-		c.logger.Errorf("Failed to get project configuration for project ID %v: %s", projectID, err)
+		c.logger.Tracef("Failed to get project configuration for project ID %v: %s", projectID, err)
 		return projectConfigurations, err
 	}
 
@@ -215,7 +213,7 @@ func (c *Cx1Client) GetProjectConfiguration(projectID string) ([]ProjectConfigur
 // UpdateProjectConfiguration updates the configuration of the project addressed by projectID
 func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []ProjectConfigurationSetting) error {
 	if len(settings) == 0 {
-		return errors.New("Empty list of settings provided.")
+		return fmt.Errorf("empty list of settings provided")
 	}
 
 	params := url.Values{
@@ -229,7 +227,7 @@ func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []Proj
 
 	_, err = c.sendRequest(http.MethodPatch, fmt.Sprintf("/configuration/project?%v", params.Encode()), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		c.logger.Errorf("Failed to update project configuration: %s", err)
+		c.logger.Tracef("Failed to update project %v configuration: %s", projectID, err)
 		return err
 	}
 
@@ -291,8 +289,8 @@ func (c *Cx1Client) GetLastScans(projectID string, limit int) ([]Scan, error) {
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil)
 	if err != nil {
-		c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
-		return scanResponse.Scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
+		c.logger.Tracef("Failed to fetch scans of project %v: %s", projectID, err)
+		return scanResponse.Scans, fmt.Errorf("failed to fetch scans of project %v: %s", projectID, err)
 	}
 
 	err = json.Unmarshal(data, &scanResponse)
@@ -316,8 +314,8 @@ func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []s
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil)
 	if err != nil {
-		c.logger.Errorf("Failed to fetch scans of project %v: %s", projectID, err)
-		return scanResponse.Scans, errors.Wrapf(err, "failed to fetch scans of project %v", projectID)
+		c.logger.Tracef("Failed to fetch scans of project %v: %s", projectID, err)
+		return scanResponse.Scans, fmt.Errorf("failed to fetch scans of project %v: %s", projectID, err)
 	}
 
 	//c.logger.Infof( "Returned: %v", string(data) )
@@ -377,7 +375,7 @@ func (c *Cx1Client) ProjectLink(p *Project) string {
 	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
 }
 
-func (c *Cx1Client) SaveProject(project *Project) error {
+func (c *Cx1Client) UpdateProject(project *Project) error {
 	c.logger.Debugf("Updating project %v", project.String())
 
 	jsonBody, err := json.Marshal(project)
@@ -387,6 +385,17 @@ func (c *Cx1Client) SaveProject(project *Project) error {
 
 	_, err = c.sendRequest(http.MethodPut, fmt.Sprintf("/projects/%v", project.ProjectID), bytes.NewReader(jsonBody), nil)
 	return err
+}
+
+func (c *Cx1Client) DeleteProject(p *Project) error {
+	c.logger.Debugf("Deleting Project %v", p.String())
+
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/projects/%v", p.ProjectID), nil, nil)
+	if err != nil {
+		return fmt.Errorf("deleting project %v failed: %s", p.String(), err)
+	}
+
+	return nil
 }
 
 func (p *Project) AssignGroup(group *Group) {

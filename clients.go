@@ -2,9 +2,8 @@ package Cx1ClientGo
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
-
-	"github.com/pkg/errors"
 )
 
 // Roles and Clients
@@ -38,5 +37,5 @@ func (c *Cx1Client) GetClientByName(clientName string) (KeyCloakClient, error) {
 		}
 	}
 
-	return client, errors.New("No such client found")
+	return client, fmt.Errorf("no such client %v found", clientName)
 }

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-
-	"github.com/pkg/errors"
 )
 
 // Presets
@@ -43,59 +41,58 @@ func (c *Cx1Client) GetPresetByName(name string) (Preset, error) {
 			return p, nil
 		}
 	}
-	return preset, errors.New("No such preset found")
+	return preset, fmt.Errorf("no such preset %v found", name)
 }
 
 func (c *Cx1Client) GetPresetByID(id uint64) (Preset, error) {
 	c.logger.Debugf("Get preset by id %d", id)
+	var temp_preset struct {
+		Preset
+		QueryStr []string `json:"queryIds"`
+	}
 	var preset Preset
+
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets/%d", id), nil, nil)
 	if err != nil {
-		return preset, err
+		return preset, fmt.Errorf("failed to get preset %d: %s", id, err)
 	}
 
-	err = json.Unmarshal(response, &preset)
+	err = json.Unmarshal(response, &temp_preset)
+
+	preset = Preset{PresetID: temp_preset.PresetID, Name: temp_preset.Name, Description: temp_preset.Description, Custom: temp_preset.Custom}
+
+	preset.QueryIDs = make([]uint64, len(temp_preset.QueryStr))
+	for id, q := range temp_preset.QueryStr {
+		var u uint64
+		u, _ = strconv.ParseUint(q, 0, 64)
+		preset.QueryIDs[id] = u
+	}
+
 	return preset, err
 }
 
-func (c *Cx1Client) GetPresetContents(p *Preset, queries *[]Query) error {
+func (c *Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
 	c.logger.Tracef("Fetching contents for preset %v", p.PresetID)
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets/%v", p.PresetID), nil, nil)
-	if err != nil {
-		return err
+	if !p.Filled {
+		preset, err := c.GetPresetByID(p.PresetID)
+		if err != nil {
+			return err
+		}
+		p.Filled = true
+		p.QueryIDs = preset.QueryIDs
 	}
-
-	var PresetContents struct {
-		ID          uint64
-		Name        string
-		Description string
-		Custom      bool
-		QueryIDs    []string
-	}
-
-	err = json.Unmarshal(response, &PresetContents)
-	if err != nil {
-		return errors.Wrap(err, "Failed to parse preset contents")
-	}
-
-	c.logger.Tracef("Parsed preset %v with %d queries", PresetContents.Name, len(PresetContents.QueryIDs))
 
 	populate_queries := true
-	if queries == nil || len(*queries) == 0 {
-		c.logger.Tracef(" - GetPresetContents call was provided with an empty queries array, will not populate the Preset.Queries array")
+	if qc == nil {
+		c.logger.Tracef(" - GetPresetContents call was provided with an empty query collection, will not populate the Preset.Queries array")
 		populate_queries = false
 	} else {
-		p.Queries = make([]Query, len(PresetContents.QueryIDs))
+		p.Queries = make([]Query, len(p.QueryIDs))
 	}
 
-	p.QueryIDs = make([]uint64, len(PresetContents.QueryIDs))
-	for id, qid := range PresetContents.QueryIDs {
-		var u uint64
-		u, _ = strconv.ParseUint(qid, 0, 64)
-		p.QueryIDs[id] = u
+	for id, qid := range p.QueryIDs {
 		if populate_queries {
-			q := c.GetQueryByID(u, queries)
+			q := qc.GetQueryByID(qid)
 			if q != nil {
 				p.Queries[id] = *q
 				c.logger.Tracef(" - linked query: %v", q.String())
@@ -103,21 +100,27 @@ func (c *Cx1Client) GetPresetContents(p *Preset, queries *[]Query) error {
 		}
 	}
 
-	p.Filled = true
-	p.Custom = PresetContents.Custom
-	p.Description = PresetContents.Description
-
 	return nil
 }
 
-func (c *Cx1Client) CreatePreset(name, description string, queryIDs []string) (Preset, error) {
+func (c *Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Preset, error) {
 	c.logger.Debugf("Creating preset %v", name)
 	var preset Preset
+
+	if len(description) > 60 {
+		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		description = description[:60]
+	}
+
+	stringIDs := make([]string, len(queryIDs))
+	for id, q := range queryIDs {
+		stringIDs[id] = fmt.Sprintf("%d", q)
+	}
 
 	body := map[string]interface{}{
 		"name":        name,
 		"description": description,
-		"queryIDs":    queryIDs,
+		"queryIDs":    stringIDs,
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -147,7 +150,7 @@ func (p *Preset) AddQueryID(queryId uint64) {
 	p.QueryIDs = append(p.QueryIDs, queryId)
 }
 
-func (c *Cx1Client) SavePreset(preset *Preset) error {
+func (c *Cx1Client) UpdatePreset(preset *Preset) error {
 	c.logger.Debugf("Saving preset %v", preset.Name)
 
 	qidstr := make([]string, len(preset.QueryIDs))
@@ -156,9 +159,15 @@ func (c *Cx1Client) SavePreset(preset *Preset) error {
 		qidstr[id] = fmt.Sprintf("%d", q)
 	}
 
+	description := preset.Description
+	if len(description) > 60 {
+		c.logger.Warn("Description is longer than 60 characters, will be truncated")
+		description = description[:60]
+	}
+
 	body := map[string]interface{}{
 		"name":        preset.Name,
-		"description": preset.Description,
+		"description": description,
 		"queryIds":    qidstr,
 	}
 
@@ -171,7 +180,7 @@ func (c *Cx1Client) SavePreset(preset *Preset) error {
 	return err
 }
 
-func (c *Cx1Client) RemovePreset(preset *Preset) error {
+func (c *Cx1Client) DeletePreset(preset *Preset) error {
 	c.logger.Debugf("Removing preset %v", preset.Name)
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/presets/%d", preset.PresetID), nil, nil)
 	return err

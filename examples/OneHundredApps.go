@@ -74,16 +74,16 @@ func main() {
 			continue
 		}
 		app.AssignProject(&project)
-		err = cx1client.SaveApplication(&app)
+		err = cx1client.UpdateApplication(&app)
 		if err != nil {
-			logger.Errorf("Failed to save application: %s", err)
+			logger.Errorf("Failed to Update application: %s", err)
 		}
 
 		project.AssignGroup(&group)
-		err = cx1client.SaveProject(&project)
+		err = cx1client.UpdateProject(&project)
 
 		if err != nil {
-			logger.Errorf("Failed to save project: %s", err)
+			logger.Errorf("Failed to Update project: %s", err)
 		}
 
 		scan, serr := cx1client.ScanProjectGit(project.ProjectID, "https://github.com/michaelkubiaczyk/ssba/", "master", []Cx1ClientGo.ScanConfiguration{scanConfig}, map[string]string{})

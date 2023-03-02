@@ -2,9 +2,6 @@ package Cx1ClientGo
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/pkg/errors"
 )
 
 type Cx1Cache struct {
@@ -15,8 +12,7 @@ type Cx1Cache struct {
 	UserRefresh    bool
 	Users          []User
 	QueryRefresh   bool
-	Queries        []Query
-	QueryGroups    []QueryGroup
+	Queries        QueryCollection
 	PresetRefresh  bool
 	Presets        []Preset
 	RoleRefresh    bool
@@ -28,7 +24,7 @@ func (c *Cx1Cache) PresetSummary() string {
 }
 
 func (c *Cx1Cache) QuerySummary() string {
-	return fmt.Sprintf("%d queries in %d query groups", len(c.Queries), len(c.QueryGroups))
+	return fmt.Sprintf("%d languages", len(c.Queries.QueryLanguages))
 }
 func (c *Cx1Cache) UserSummary() string {
 	return fmt.Sprintf("%d users", len(c.Users))
@@ -75,7 +71,6 @@ func (c *Cx1Cache) RefreshQueries(client *Cx1Client) error {
 	if !c.QueryRefresh {
 		c.QueryRefresh = true
 		c.Queries, err = client.GetQueries()
-		c.QueryGroups = client.GetQueryGroups(&c.Queries)
 		c.QueryRefresh = false
 	}
 	return err
@@ -88,12 +83,12 @@ func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
 		c.Presets, err = client.GetPresets()
 
 		if err != nil {
-			client.logger.Errorf("Failed while retrieving presets: %s", err)
+			client.logger.Tracef("Failed while retrieving presets: %s", err)
 		} else {
 			for id := range c.Presets {
 				err := client.GetPresetContents(&c.Presets[id], &c.Queries)
 				if err != nil {
-					client.logger.Errorf("Failed to retrieve preset contents for preset %v: %s", c.Presets[id].String(), err)
+					client.logger.Tracef("Failed to retrieve preset contents for preset %v: %s", c.Presets[id].String(), err)
 				}
 			}
 		}
@@ -108,7 +103,7 @@ func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
 		c.RoleRefresh = true
 		c.Roles, err = client.GetCombinedRoles()
 		if err != nil {
-			client.logger.Errorf("Failed while retrieving roles: %s", err)
+			client.logger.Tracef("Failed while retrieving roles: %s", err)
 		} else {
 			for id, r := range c.Roles {
 				var role Role
@@ -118,7 +113,7 @@ func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
 				}
 				c.Roles[id].Attributes = role.Attributes
 				if err != nil {
-					client.logger.Errorf("Failed to retrieve details for role %v: %s", r.String(), err)
+					client.logger.Tracef("Failed to retrieve details for role %v: %s", r.String(), err)
 				}
 			}
 		}
@@ -169,7 +164,7 @@ func (c *Cx1Cache) GetGroup(groupID string) (*Group, error) {
 			return &c.Groups[id], nil
 		}
 	}
-	return nil, errors.New("No such group")
+	return nil, fmt.Errorf("no such group %v", groupID)
 }
 func (c *Cx1Cache) GetGroupByName(name string) (*Group, error) {
 	for id, t := range c.Groups {
@@ -177,7 +172,7 @@ func (c *Cx1Cache) GetGroupByName(name string) (*Group, error) {
 			return &c.Groups[id], nil
 		}
 	}
-	return nil, errors.New("No such group")
+	return nil, fmt.Errorf("no such group %v", name)
 }
 
 func (c *Cx1Cache) GetUser(userID string) (*User, error) {
@@ -186,7 +181,7 @@ func (c *Cx1Cache) GetUser(userID string) (*User, error) {
 			return &c.Users[id], nil
 		}
 	}
-	return nil, errors.New("No such user")
+	return nil, fmt.Errorf("no such user %v", userID)
 }
 func (c *Cx1Cache) GetUserByEmail(email string) (*User, error) {
 	for id, g := range c.Users {
@@ -194,7 +189,7 @@ func (c *Cx1Cache) GetUserByEmail(email string) (*User, error) {
 			return &c.Users[id], nil
 		}
 	}
-	return nil, errors.New("No such user")
+	return nil, fmt.Errorf("no such user %v", email)
 }
 func (c *Cx1Cache) GetUserByString(displaystring string) (*User, error) {
 	for id, g := range c.Users {
@@ -202,7 +197,7 @@ func (c *Cx1Cache) GetUserByString(displaystring string) (*User, error) {
 			return &c.Users[id], nil
 		}
 	}
-	return nil, errors.New("No such user")
+	return nil, fmt.Errorf("no such user %v", displaystring)
 }
 
 func (c *Cx1Cache) GetProject(projectID string) (*Project, error) {
@@ -211,7 +206,7 @@ func (c *Cx1Cache) GetProject(projectID string) (*Project, error) {
 			return &c.Projects[id], nil
 		}
 	}
-	return nil, errors.New("No such project")
+	return nil, fmt.Errorf("no such project %v", projectID)
 }
 func (c *Cx1Cache) GetProjectByName(name string) (*Project, error) {
 	for id, g := range c.Projects {
@@ -219,7 +214,7 @@ func (c *Cx1Cache) GetProjectByName(name string) (*Project, error) {
 			return &c.Projects[id], nil
 		}
 	}
-	return nil, errors.New("No such project")
+	return nil, fmt.Errorf("no such project %v", name)
 }
 
 func (c *Cx1Cache) GetPreset(presetID uint64) (*Preset, error) {
@@ -228,7 +223,7 @@ func (c *Cx1Cache) GetPreset(presetID uint64) (*Preset, error) {
 			return &c.Presets[id], nil
 		}
 	}
-	return nil, errors.New("No such preset")
+	return nil, fmt.Errorf("no such preset %d", presetID)
 }
 func (c *Cx1Cache) GetPresetByName(name string) (*Preset, error) {
 	for id, g := range c.Presets {
@@ -236,7 +231,7 @@ func (c *Cx1Cache) GetPresetByName(name string) (*Preset, error) {
 			return &c.Presets[id], nil
 		}
 	}
-	return nil, errors.New("No such preset")
+	return nil, fmt.Errorf("no such preset %v", name)
 }
 
 func (c *Cx1Cache) GetRole(roleID string) (*Role, error) {
@@ -245,7 +240,7 @@ func (c *Cx1Cache) GetRole(roleID string) (*Role, error) {
 			return &c.Roles[id], nil
 		}
 	}
-	return nil, errors.New("No such role")
+	return nil, fmt.Errorf("no such role %v", roleID)
 }
 func (c *Cx1Cache) GetRoleByName(name string) (*Role, error) {
 	for id, g := range c.Roles {
@@ -253,26 +248,28 @@ func (c *Cx1Cache) GetRoleByName(name string) (*Role, error) {
 			return &c.Roles[id], nil
 		}
 	}
-	return nil, errors.New("No such role")
+	return nil, fmt.Errorf("no such role %v", name)
 }
 
 func (c *Cx1Cache) GetQuery(queryID uint64) (*Query, error) {
-	for id, g := range c.Queries {
-		if g.QueryID == queryID {
-			return &c.Queries[id], nil
-		}
+	q := c.Queries.GetQueryByID(queryID)
+	if q != nil {
+		return q, nil
 	}
-	return nil, errors.New("No such query")
+	return nil, fmt.Errorf("no such query %d", queryID)
 }
 func (c *Cx1Cache) GetQueryByNames(language, group, query string) (*Query, error) {
-	l := strings.ToUpper(language)
-	g := strings.ToUpper(group)
-	q := strings.ToUpper(query)
-
-	for id, t := range c.Queries {
-		if strings.ToUpper(t.Language) == l && strings.ToUpper(t.Group) == g && strings.ToUpper(t.Name) == q {
-			return &c.Queries[id], nil
-		}
+	ql := c.Queries.GetQueryLanguage(language)
+	if ql == nil {
+		return nil, fmt.Errorf("no such language %v", language)
 	}
-	return nil, errors.New("No such query")
+	qg := ql.GetQueryGroup(group)
+	if qg == nil {
+		return nil, fmt.Errorf("no such group %v", group)
+	}
+	q := qg.GetQuery(query)
+	if q == nil {
+		return nil, fmt.Errorf("no such query %v", query)
+	}
+	return q, nil
 }

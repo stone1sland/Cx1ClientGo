@@ -33,18 +33,21 @@ type ApplicationRule struct {
 }
 
 type Group struct {
-	GroupID string `json:"id"`
-	Name    string
+	GroupID     string              `json:"id"`
+	Name        string              `json:"name"`
+	SubGroups   []Group             `json:"subGroups"`
+	ClientRoles map[string][]string `json:"clientRoles"`
+	Filled      bool                `json:"-"`
 	//	Path string // ignoring for now
 	//  SubGroups string // ignoring for now
 }
 
 type Preset struct {
-	PresetID    uint64 `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Custom      bool   `json:"custom"`
-	QueryIDs    []uint64
+	PresetID    uint64   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Custom      bool     `json:"custom"`
+	QueryIDs    []uint64 `json:"-"`
 	Filled      bool
 	Queries     []Query
 }
@@ -87,7 +90,16 @@ type Query struct {
 type QueryGroup struct {
 	Name     string
 	Language string
-	Queries  []*Query
+	Queries  []Query
+}
+
+type QueryLanguage struct {
+	Name        string
+	QueryGroups []QueryGroup
+}
+
+type QueryCollection struct {
+	QueryLanguages []QueryLanguage
 }
 
 type ReportStatus struct {
@@ -289,6 +301,7 @@ type User struct {
 	UserName  string   `json:"username"`
 	Email     string   `json:"email"`
 	Groups    []string `json:"groups"`
+	Roles     []string `json:"roles"`
 }
 
 type WorkflowLog struct {
