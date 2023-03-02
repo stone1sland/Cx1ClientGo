@@ -46,64 +46,59 @@ func (c *Cx1Client) GetPresetByName(name string) (Preset, error) {
 
 func (c *Cx1Client) GetPresetByID(id uint64) (Preset, error) {
 	c.logger.Debugf("Get preset by id %d", id)
+	var temp_preset struct {
+		Preset
+		QueryStr []string `json:"queryIds"`
+	}
 	var preset Preset
+
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets/%d", id), nil, nil)
 	if err != nil {
 		return preset, fmt.Errorf("failed to get preset %d: %s", id, err)
 	}
 
-	err = json.Unmarshal(response, &preset)
+	err = json.Unmarshal(response, &temp_preset)
+
+	preset = Preset{PresetID: temp_preset.PresetID, Name: temp_preset.Name, Description: temp_preset.Description, Custom: temp_preset.Custom}
+
+	preset.QueryIDs = make([]uint64, len(temp_preset.QueryStr))
+	for id, q := range temp_preset.QueryStr {
+		var u uint64
+		u, _ = strconv.ParseUint(q, 0, 64)
+		preset.QueryIDs[id] = u
+	}
+
 	return preset, err
 }
 
 func (c *Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
 	c.logger.Tracef("Fetching contents for preset %v", p.PresetID)
-
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets/%v", p.PresetID), nil, nil)
-	if err != nil {
-		return err
+	if !p.Filled {
+		preset, err := c.GetPresetByID(p.PresetID)
+		if err != nil {
+			return err
+		}
+		p.Filled = true
+		p.QueryIDs = preset.QueryIDs
 	}
-
-	var PresetContents struct {
-		ID          uint64
-		Name        string
-		Description string
-		Custom      bool
-		QueryIDs    []string
-	}
-
-	err = json.Unmarshal(response, &PresetContents)
-	if err != nil {
-		return fmt.Errorf("failed to parse preset contents for preset %d: %s", p.PresetID, err)
-	}
-
-	c.logger.Tracef("Parsed preset %v with %d queries", PresetContents.Name, len(PresetContents.QueryIDs))
 
 	populate_queries := true
 	if qc == nil {
 		c.logger.Tracef(" - GetPresetContents call was provided with an empty query collection, will not populate the Preset.Queries array")
 		populate_queries = false
 	} else {
-		p.Queries = make([]Query, len(PresetContents.QueryIDs))
+		p.Queries = make([]Query, len(p.QueryIDs))
 	}
 
-	p.QueryIDs = make([]uint64, len(PresetContents.QueryIDs))
-	for id, qid := range PresetContents.QueryIDs {
-		var u uint64
-		u, _ = strconv.ParseUint(qid, 0, 64)
-		p.QueryIDs[id] = u
+	for id, qid := range p.QueryIDs {
 		if populate_queries {
-			q := qc.GetQueryByID(u)
+			q := qc.GetQueryByID(qid)
 			if q != nil {
 				p.Queries[id] = *q
 				c.logger.Tracef(" - linked query: %v", q.String())
 			}
 		}
 	}
-
-	p.Filled = true
-	p.Custom = PresetContents.Custom
-	p.Description = PresetContents.Description
 
 	return nil
 }
@@ -117,10 +112,15 @@ func (c *Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (P
 		description = description[:60]
 	}
 
+	stringIDs := make([]string, len(queryIDs))
+	for id, q := range queryIDs {
+		stringIDs[id] = fmt.Sprintf("%d", q)
+	}
+
 	body := map[string]interface{}{
 		"name":        name,
 		"description": description,
-		"queryIDs":    queryIDs,
+		"queryIDs":    stringIDs,
 	}
 
 	jsonBody, err := json.Marshal(body)

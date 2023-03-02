@@ -33,21 +33,21 @@ type ApplicationRule struct {
 }
 
 type Group struct {
-	GroupID     string `json:"id"`
-	Name        string
+	GroupID     string              `json:"id"`
+	Name        string              `json:"name"`
 	SubGroups   []Group             `json:"subGroups"`
 	ClientRoles map[string][]string `json:"clientRoles"`
-
+	Filled      bool                `json:"-"`
 	//	Path string // ignoring for now
 	//  SubGroups string // ignoring for now
 }
 
 type Preset struct {
-	PresetID    uint64 `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Custom      bool   `json:"custom"`
-	QueryIDs    []uint64
+	PresetID    uint64   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Custom      bool     `json:"custom"`
+	QueryIDs    []uint64 `json:"-"`
 	Filled      bool
 	Queries     []Query
 }
