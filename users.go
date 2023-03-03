@@ -188,7 +188,6 @@ func (c *Cx1Client) UserLink(u *User) string {
 }
 
 func (c *Cx1Client) GetUserGroups(user *User) error {
-	// fills user's group struct
 	var usergroups []Group
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/groups", user.UserID), nil, nil)
@@ -198,15 +197,11 @@ func (c *Cx1Client) GetUserGroups(user *User) error {
 		return err
 	}
 
-	//c.logger.Infof("Response: %v", string(response))
-
 	err = json.Unmarshal(response, &usergroups)
 	if err != nil {
 		c.logger.Tracef("Failed to unmarshal response: %s", err)
 		return err
 	}
-
-	//c.logger.Infof("User is in %d groups", len(usergroups))
 
 	user.Groups = usergroups
 

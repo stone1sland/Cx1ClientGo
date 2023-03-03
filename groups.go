@@ -36,13 +36,11 @@ func (c *Cx1Client) CreateChildGroup(parentGroup Group, childGroupName string) (
 	c.logger.Debugf("Create child Group: %v ", childGroupName)
 	data := map[string]interface{}{
 		"name": childGroupName,
-		//"path": parentGroup.Path + "/" + childGroupName,
 	}
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
 		return Group{}, err
 	}
-
 
 	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups/"+parentGroup.GroupID+"/children", bytes.NewReader(jsonBody), nil)
 	if err != nil {
