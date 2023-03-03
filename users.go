@@ -189,11 +189,7 @@ func (c *Cx1Client) UserLink(u *User) string {
 
 func (c *Cx1Client) GetUserGroups(user *User) error {
 	// fills user's group struct
-	var usergroups []struct {
-		Id   string
-		Name string
-		Path string
-	}
+	var usergroups []Group
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/groups", user.UserID), nil, nil)
 
@@ -212,18 +208,14 @@ func (c *Cx1Client) GetUserGroups(user *User) error {
 
 	//c.logger.Infof("User is in %d groups", len(usergroups))
 
-	user.Groups = make([]string, 0)
-	for _, ug := range usergroups {
-		user.Groups = append(user.Groups, ug.Id)
-		c.logger.Infof("User is in group: %v %v", ug.Id, ug.Name)
-	}
+	user.Groups = usergroups
 
 	return nil
 }
 
 func (u *User) IsInGroup(groupId string) bool {
 	for _, g := range u.Groups {
-		if g == groupId {
+		if g.GroupID == groupId {
 			return true
 		}
 	}
