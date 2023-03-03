@@ -32,6 +32,27 @@ func (c *Cx1Client) CreateGroup(groupname string) (Group, error) {
 	return c.GetGroupByName(groupname)
 }
 
+func (c *Cx1Client) CreateChildGroup(parentGroup Group, childGroupName string) (Group, error) {
+	c.logger.Debugf("Create child Group: %v ", childGroupName)
+	data := map[string]interface{}{
+		"name": childGroupName,
+		//"path": parentGroup.Path + "/" + childGroupName,
+	}
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		return Group{}, err
+	}
+
+
+	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups/"+parentGroup.GroupID+"/children", bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		c.logger.Errorf("Error creating group: %s", err)
+		return Group{}, err
+	}
+
+	return parentGroup, nil
+}
+
 func (c *Cx1Client) GetGroupsPIP() ([]Group, error) {
 	c.logger.Debug("Get cx1 groups pip")
 	var groups []Group
