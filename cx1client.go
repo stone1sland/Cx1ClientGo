@@ -170,7 +170,7 @@ func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header ht
 	if err != nil {
 		c.logger.Tracef("Failed HTTP request: %s", err)
 		var resBody []byte
-		if response.Body != nil {
+		if response != nil && response.Body != nil {
 			resBody, _ = io.ReadAll(response.Body)
 		}
 		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)

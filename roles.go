@@ -22,6 +22,15 @@ func (r *Role) HasCategory(name string) bool {
 	return false
 }
 
+func (r *Role) HasRole(name string) bool {
+	for _, r := range r.SubRoles {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Cx1Client) GetKeyCloakRoles() ([]Role, error) {
 	c.logger.Debugf("Getting KeyCloak Roles")
 	var roles []Role
@@ -74,6 +83,59 @@ func (c *Cx1Client) GetRoleByClientAndName(clientId string, name string) (Role, 
 	return role, err
 }
 
+func (c *Cx1Client) GetRoleComposites(role *Role) ([]Role, error) {
+	var roles []Role
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/roles-by-id/%v/composites", role.RoleID), nil, nil)
+	if err != nil {
+		return roles, err
+	}
+
+	err = json.Unmarshal(response, &roles)
+	return roles, err
+}
+
+func (c *Cx1Client) AddRoleComposites(role *Role, roleIds []string) error {
+	if len(roleIds) == 0 {
+		return fmt.Errorf("no role IDs provided")
+	}
+
+	roleList := make([]struct {
+		ID string `json:"id"`
+	}, len(roleIds))
+	for id, role := range roleIds {
+		roleList[id].ID = role
+	}
+
+	jsonBody, _ := json.Marshal(roleList)
+	_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/roles-by-id/%v/composites", role.RoleID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Cx1Client) RemoveRoleComposites(role *Role, roleIds []string) error {
+	if len(roleIds) == 0 {
+		return fmt.Errorf("no role IDs provided")
+	}
+
+	roleList := make([]struct {
+		ID string `json:"id"`
+	}, len(roleIds))
+	for id, role := range roleIds {
+		roleList[id].ID = role
+	}
+
+	jsonBody, _ := json.Marshal(roleList)
+	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/roles-by-id/%v/composites", role.RoleID), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Cx1Client) CreateASTRole(roleName, createdBy string) (Role, error) {
 	c.logger.Debugf("User %v creating client role %v", createdBy, roleName)
 	data := map[string]interface{}{
@@ -99,6 +161,22 @@ func (c *Cx1Client) CreateASTRole(roleName, createdBy string) (Role, error) {
 	}
 
 	return c.GetRoleByClientAndName(c.GetASTAppID(), roleName)
+}
+
+func (c *Cx1Client) GetRoleByID(roleId string) (Role, error) {
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/roles-by-id/%v", roleId), nil, nil)
+	var role Role
+	if err != nil {
+		return role, err
+	}
+
+	err = json.Unmarshal(response, &role)
+	return role, err
+}
+
+func (c *Cx1Client) DeleteRoleByID(roleId string) error {
+	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/roles-by-id/%v", roleId), nil, nil)
+	return err
 }
 
 func (c *Cx1Client) GetASTRoles() ([]Role, error) {

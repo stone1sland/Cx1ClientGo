@@ -38,8 +38,6 @@ type Group struct {
 	SubGroups   []Group             `json:"subGroups"`
 	ClientRoles map[string][]string `json:"clientRoles"`
 	Filled      bool                `json:"-"`
-	//	Path string // ignoring for now
-	//  SubGroups string // ignoring for now
 }
 
 type Preset struct {
@@ -48,7 +46,7 @@ type Preset struct {
 	Description string   `json:"description"`
 	Custom      bool     `json:"custom"`
 	QueryIDs    []uint64 `json:"-"`
-	Filled      bool
+	Filled      bool     `json:"-"`
 	Queries     []Query
 }
 
@@ -144,6 +142,7 @@ type Role struct {
 	} `json:"attributes"`
 	Composite  bool `json:"composite"`
 	ClientRole bool `json:"clientRole"`
+	SubRoles   []Role
 }
 
 type Scan struct {
