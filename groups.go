@@ -287,9 +287,6 @@ func (c *Cx1Client) groupRoleChange(g *Group) error {
 	return nil
 }
 
-// https://deu.iam.checkmarx.net/auth/admin/realms/cx_tam_appsec_canary_michael_kubiaczyk/groups/6083061f-09a9-447f-a609-282d8feae780/role-mappings/clients/8f855199-bf36-4c37-8edf-cbff9dd6aa37
-// post [{"clientRole":true,"composite":true,"containerId":"8f855199-bf36-4c37-8edf-cbff9dd6aa37","id":"b25c6003-7332-479f-bcff-cbf171e68b25","name":"scanonly"}]
-// https://deu.iam.checkmarx.net/auth/admin/realms/cx_tam_appsec_canary_michael_kubiaczyk/groups/6083061f-09a9-447f-a609-282d8feae780
 func (c *Cx1Client) DeleteRolesFromGroup(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`
