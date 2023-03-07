@@ -294,14 +294,14 @@ type Status struct {
 }
 
 type User struct {
-	Enabled   bool     `json:"enabled"`
-	UserID    string   `json:"id,omitempty"`
-	FirstName string   `json:"firstName"`
-	LastName  string   `json:"lastName"`
-	UserName  string   `json:"username"`
-	Email     string   `json:"email"`
-	Groups    []Group  `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
-	Roles     []string `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
+	Enabled   bool    `json:"enabled"`
+	UserID    string  `json:"id,omitempty"`
+	FirstName string  `json:"firstName"`
+	LastName  string  `json:"lastName"`
+	UserName  string  `json:"username"`
+	Email     string  `json:"email"`
+	Groups    []Group `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
+	//Roles     []Role  `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
 }
 
 type WorkflowLog struct {

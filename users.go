@@ -217,6 +217,15 @@ func (u *User) IsInGroup(groupId string) bool {
 	return false
 }
 
+func (u *User) IsInGroupByName(groupName string) bool {
+	for _, g := range u.Groups {
+		if g.Name == groupName {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Cx1Client) AssignUserToGroup(user *User, groupId string) error {
 	if !user.IsInGroup(groupId) {
 		params := map[string]string{
