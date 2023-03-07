@@ -32,26 +32,32 @@ func (c *Cx1Client) CreateGroup(groupname string) (Group, error) {
 	return c.GetGroupByName(groupname)
 }
 
-func (c *Cx1Client) CreateChildGroup(parentGroup Group, childGroupName string) (Group, error) {
+func (c *Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) (Group, error) {
 	c.logger.Debugf("Create child Group: %v ", childGroupName)
+	var child_group Group
 	data := map[string]interface{}{
 		"name": childGroupName,
 	}
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
-		return Group{}, err
+		return child_group, err
 	}
 
-	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups/"+parentGroup.GroupID+"/children", bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups/"+parentGroup.GroupID+"/children", bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		c.logger.Errorf("Error creating group: %s", err)
-		return Group{}, err
+		return child_group, err
 	}
 
-	// Todo: get the new child to add to parent subgroups + return
-	// parentGroup.SubGroups = append(parentGroup.SubGroups, new_child )
+	err = json.Unmarshal(response, &child_group)
+	if err != nil {
+		c.logger.Errorf("Error unmarshalling new child group: %s", err)
+		return child_group, err
+	}
 
-	return parentGroup, nil
+	parentGroup.SubGroups = append(parentGroup.SubGroups, child_group)
+
+	return child_group, err
 }
 
 func (c *Cx1Client) GetGroupsPIP() ([]Group, error) {
