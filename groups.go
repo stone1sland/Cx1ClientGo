@@ -48,6 +48,9 @@ func (c *Cx1Client) CreateChildGroup(parentGroup Group, childGroupName string) (
 		return Group{}, err
 	}
 
+	// Todo: get the new child to add to parent subgroups + return
+	// parentGroup.SubGroups = append(parentGroup.SubGroups, new_child )
+
 	return parentGroup, nil
 }
 

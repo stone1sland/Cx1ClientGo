@@ -35,7 +35,7 @@ type ApplicationRule struct {
 type Group struct {
 	GroupID     string              `json:"id"`
 	Name        string              `json:"name"`
-	Path        string  		`json:"path"`
+	Path        string              `json:"path"`
 	SubGroups   []Group             `json:"subGroups"`
 	ClientRoles map[string][]string `json:"clientRoles"`
 	Filled      bool                `json:"-"`
@@ -300,8 +300,8 @@ type User struct {
 	LastName  string   `json:"lastName"`
 	UserName  string   `json:"username"`
 	Email     string   `json:"email"`
-	Groups    []Group  `json:"groups"`
-	Roles     []string `json:"roles"`
+	Groups    []Group  `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
+	Roles     []string `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
 }
 
 type WorkflowLog struct {
