@@ -32,23 +32,32 @@ func (c *Cx1Client) CreateGroup(groupname string) (Group, error) {
 	return c.GetGroupByName(groupname)
 }
 
-func (c *Cx1Client) CreateChildGroup(parentGroup Group, childGroupName string) (Group, error) {
+func (c *Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) (Group, error) {
 	c.logger.Debugf("Create child Group: %v ", childGroupName)
+	var child_group Group
 	data := map[string]interface{}{
 		"name": childGroupName,
 	}
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
-		return Group{}, err
+		return child_group, err
 	}
 
-	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups/"+parentGroup.GroupID+"/children", bytes.NewReader(jsonBody), nil)
+	response, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", "/groups/"+parentGroup.GroupID+"/children", bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		c.logger.Errorf("Error creating group: %s", err)
-		return Group{}, err
+		return child_group, err
 	}
 
-	return parentGroup, nil
+	err = json.Unmarshal(response, &child_group)
+	if err != nil {
+		c.logger.Errorf("Error unmarshalling new child group: %s", err)
+		return child_group, err
+	}
+
+	parentGroup.SubGroups = append(parentGroup.SubGroups, child_group)
+
+	return child_group, err
 }
 
 func (c *Cx1Client) GetGroupsPIP() ([]Group, error) {
@@ -306,9 +315,6 @@ func (c *Cx1Client) groupRoleChange(g *Group) error {
 	return nil
 }
 
-// https://deu.iam.checkmarx.net/auth/admin/realms/cx_tam_appsec_canary_michael_kubiaczyk/groups/6083061f-09a9-447f-a609-282d8feae780/role-mappings/clients/8f855199-bf36-4c37-8edf-cbff9dd6aa37
-// post [{"clientRole":true,"composite":true,"containerId":"8f855199-bf36-4c37-8edf-cbff9dd6aa37","id":"b25c6003-7332-479f-bcff-cbf171e68b25","name":"scanonly"}]
-// https://deu.iam.checkmarx.net/auth/admin/realms/cx_tam_appsec_canary_michael_kubiaczyk/groups/6083061f-09a9-447f-a609-282d8feae780
 func (c *Cx1Client) DeleteRolesFromGroup(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`

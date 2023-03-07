@@ -236,6 +236,8 @@ func (c *Cx1Client) AssignUserToGroup(user *User, groupId string) error {
 			c.logger.Tracef("Failed to add user to group: %s", err)
 			return err
 		}
+
+		// TODO: Should user structure be updated to include the new group membership? (get group obj, append to list)
 	}
 	return nil
 }
@@ -259,6 +261,8 @@ func (c *Cx1Client) RemoveUserFromGroup(user *User, groupId string) error {
 			c.logger.Tracef("Failed to remove user from group: %s", err)
 			return err
 		}
+
+		// TODO: should user structure be updated to remove the group also? (iterate over list & remove element?)
 	}
 	return nil
 }
