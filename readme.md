@@ -201,7 +201,7 @@ go run . "https://eu.ast.checkmarx.net" "https://eu.iam.checkmarx.net" "tenant" 
 
 
 Current API coverage:
-
+```
 Cx1: Delete /api/applications/%v
 Cx1: Delete /api/presets/%d
 Cx1: Delete /api/projects/%v
@@ -280,3 +280,4 @@ IAM: Post /auth/admin/tenant/users/%v/role-mappings/realm
 IAM: Put /auth/admin/tenant/groups/%v
 IAM: Put /auth/admin/tenant/users/%v
 IAM: Put /auth/admin/tenant/users/%v/groups/%v
+```
