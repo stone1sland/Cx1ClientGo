@@ -1,6 +1,6 @@
 This is a basic CheckmarxOne REST API client written in GoLang. It already covers much of the CheckmarxOne API allowing Read operations on Applications, Clients, Groups, Presets, Projects, Queries, Reports, Results, Roles, Scans, and Users. Many of these include full CRUD support but this is still a work in progress.
 
-Feel free to use or modify this code, open issues, or submit pull requests. 
+Feel free to use or modify this code, open issues, or submit pull requests. Please submit pull requests against the Dev branch - I will try to keep the main branch clean with only tagged versions. Since this code is changing regularly, consider using a specific tag of Cx1ClientGo until you can test against a newer release.
 
 Basic usage:
 
