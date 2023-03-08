@@ -18,6 +18,7 @@ import (
 
 var cxOrigin = "Cx1-Golang-Client"
 var astAppID string
+var tenantID string
 
 func init() {
 
@@ -42,6 +43,10 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 	oauthclient := conf.Client(ctx)
 
 	cli := Cx1Client{oauthclient, base_url, iam_url, tenant, logger}
+
+	_ = cli.GetTenantID()
+	_ = cli.GetASTAppID()
+
 	return &cli, nil
 }
 
@@ -72,6 +77,10 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	oauthclient := conf.Client(ctx, token)
 
 	cli := Cx1Client{oauthclient, base_url, iam_url, tenant, logger}
+
+	_ = cli.GetTenantID()
+	_ = cli.GetASTAppID()
+
 	return &cli, nil
 }
 
@@ -248,21 +257,6 @@ func (c *Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, response
 	}
 }
 
-// convenience function
-func (c *Cx1Client) GetASTAppID() string {
-	if astAppID == "" {
-		client, err := c.GetClientByName("ast-app")
-		if err != nil {
-			c.logger.Warnf("Error finding AST App ID: %s", err)
-			return ""
-		}
-
-		astAppID = client.ClientID
-	}
-
-	return astAppID
-}
-
 func (c *Cx1Client) String() string {
 	return fmt.Sprintf("%v on %v ", c.tenant, c.baseUrl)
 }
@@ -272,4 +266,12 @@ func ShortenGUID(guid string) string {
 		return ".."
 	}
 	return fmt.Sprintf("%v..%v", guid[:2], guid[len(guid)-2:])
+}
+
+func (c *Cx1Client) depwarn(old, new string) {
+	if new == "" {
+		c.logger.Warnf("Cx1ClientGo deprecation notice: %v will be deprecated", old)
+	} else {
+		c.logger.Warnf("Cx1ClientGo deprecation notice: %v will be deprecated and replaced by %v", old, new)
+	}
 }

@@ -85,6 +85,30 @@ func (c *Cx1Client) GetUserByUserName(name string) (User, error) {
 	return users[0], err
 }
 
+func (c *Cx1Client) GetUserByEmail(email string) (User, error) {
+	c.logger.Debugf("Get Cx1 User by email: %v", email)
+
+	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/?exact=true&email=%v", url.QueryEscape(email)), nil, nil)
+	if err != nil {
+		return User{}, err
+	}
+
+	var users []User
+
+	err = json.Unmarshal(response, &users)
+	if err != nil {
+		return User{}, err
+	}
+	if len(users) == 0 {
+		return User{}, fmt.Errorf("no user %v found", email)
+	}
+	if len(users) > 1 {
+		return User{}, fmt.Errorf("too many users (%d) match %v", len(users), email)
+	}
+	return users[0], err
+}
+
 func (c *Cx1Client) CreateUser(newuser User) (User, error) {
 	c.logger.Debugf("Creating a new user %v", newuser.String())
 	newuser.UserID = ""
@@ -103,7 +127,7 @@ func (c *Cx1Client) CreateUser(newuser User) (User, error) {
 	if location != "" {
 		lastInd := strings.LastIndex(location, "/")
 		guid := location[lastInd+1:]
-		c.logger.Infof(" New user ID: %v", guid)
+		c.logger.Tracef(" New user ID: %v", guid)
 		return c.GetUserByID(guid)
 	} else {
 		return User{}, fmt.Errorf("unknown error - no Location header redirect in response")
@@ -122,7 +146,11 @@ func (c *Cx1Client) UpdateUser(user *User) error {
 	return err
 }
 
-func (c *Cx1Client) DeleteUser(userid string) error {
+func (c *Cx1Client) DeleteUser(user *User) error {
+	return c.DeleteUserByID(user.UserID)
+}
+
+func (c *Cx1Client) DeleteUserByID(userid string) error {
 	c.logger.Debugf("Deleting a user %v", userid)
 
 	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v", userid), nil, nil)
@@ -133,82 +161,68 @@ func (c *Cx1Client) DeleteUser(userid string) error {
 	return nil
 }
 
+// these functions to be deprecated/hidden in favor of simpler functions below
 func (c *Cx1Client) GetUserRoleMappings(userID string, clientID string) ([]Role, error) {
-	c.logger.Debugf("Get Cx1 Rolemappings for userid %v and clientid %v", userID, clientID)
-
-	var roles []Role
-	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/clients/%v", userID, clientID), nil, nil)
-	if err != nil {
-		return roles, err
-	}
-	err = json.Unmarshal(response, &roles)
-	return roles, err
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.getUserRolesByClientID(userID, clientID)
 }
 
 func (c *Cx1Client) GetUserASTRoleMappings(userID string) ([]Role, error) {
-	return c.GetUserRoleMappings(userID, c.GetASTAppID())
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.getUserRolesByClientID(userID, c.GetASTAppID())
 }
 
 func (c *Cx1Client) AddUserRoleMappings(userID string, clientID string, roles []Role) error {
-	c.logger.Debugf("Add Cx1 Rolemappings for userid %v and clientid %v", userID, clientID)
-
-	jsonBody, err := json.Marshal(roles)
-	if err != nil {
-		c.logger.Tracef("Failed to marshal roles: %s", err)
-		return err
-	}
-
-	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/clients/%v", userID, clientID), bytes.NewReader(jsonBody), nil)
-	return err
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.addUserRolesByClientID(userID, clientID, &roles)
 }
 
 func (c *Cx1Client) AddUserASTRoleMappings(userID string, roles []Role) error {
-	return c.AddUserRoleMappings(userID, c.GetASTAppID(), roles)
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.addUserRolesByClientID(userID, c.GetASTAppID(), &roles)
 }
 
 func (c *Cx1Client) RemoveUserRoleMappings(userID string, clientID string, roles []Role) error {
-	c.logger.Debugf("Add Cx1 Rolemappings for userid %v and clientid %v", userID, clientID)
-
-	jsonBody, err := json.Marshal(roles)
-	if err != nil {
-		c.logger.Tracef("Failed to marshal roles: %s", err)
-		return err
-	}
-
-	_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/clients/%v", userID, clientID), bytes.NewReader(jsonBody), nil)
-	return err
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.removeUserRolesByClientID(userID, clientID, &roles)
 }
 
 func (c *Cx1Client) RemoveUserASTRoleMappings(userID string, roles []Role) error {
-	return c.RemoveUserRoleMappings(userID, c.GetASTAppID(), roles)
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.removeUserRolesByClientID(userID, c.GetASTAppID(), &roles)
 }
+
+// end to-be-deprecated function block
 
 func (c *Cx1Client) UserLink(u *User) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID)
 }
 
-func (c *Cx1Client) GetUserGroups(user *User) error {
+func (c *Cx1Client) GetUserGroups(user *User) ([]Group, error) {
 	var usergroups []Group
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/groups", user.UserID), nil, nil)
 
 	if err != nil {
 		c.logger.Tracef("Failed to fetch user's groups: %s", err)
-		return err
+		return []Group{}, err
 	}
 
 	err = json.Unmarshal(response, &usergroups)
 	if err != nil {
 		c.logger.Tracef("Failed to unmarshal response: %s", err)
-		return err
+		return []Group{}, err
 	}
 
 	user.Groups = usergroups
 
-	return nil
+	return user.Groups, nil
 }
 
-func (u *User) IsInGroup(groupId string) bool {
+func (u *User) IsInGroup(group *Group) bool {
+	return u.IsInGroupByID(group.GroupID)
+}
+func (u *User) IsInGroupByID(groupId string) bool {
 	for _, g := range u.Groups {
 		if g.GroupID == groupId {
 			return true
@@ -216,7 +230,6 @@ func (u *User) IsInGroup(groupId string) bool {
 	}
 	return false
 }
-
 func (u *User) IsInGroupByName(groupName string) bool {
 	for _, g := range u.Groups {
 		if g.Name == groupName {
@@ -227,7 +240,11 @@ func (u *User) IsInGroupByName(groupName string) bool {
 }
 
 func (c *Cx1Client) AssignUserToGroup(user *User, groupId string) error {
-	if !user.IsInGroup(groupId) {
+	c.logger.Warnf("AssignUserToGroup will be replace by clearer AssignUserToGroupByID")
+	return c.AssignUserToGroupByID(user, groupId)
+}
+func (c *Cx1Client) AssignUserToGroupByID(user *User, groupId string) error {
+	if !user.IsInGroupByID(groupId) {
 		params := map[string]string{
 			"realm":   c.tenant,
 			"userId":  user.UserID,
@@ -252,7 +269,12 @@ func (c *Cx1Client) AssignUserToGroup(user *User, groupId string) error {
 }
 
 func (c *Cx1Client) RemoveUserFromGroup(user *User, groupId string) error {
-	if user.IsInGroup(groupId) {
+	c.depwarn("RemoveUserFromGroup", "RemoveUserFromGroupByID")
+	return c.RemoveUserFromGroupByID(user, groupId)
+}
+
+func (c *Cx1Client) RemoveUserFromGroupByID(user *User, groupId string) error {
+	if user.IsInGroupByID(groupId) {
 		params := map[string]string{
 			"realm":   c.tenant,
 			"userId":  user.UserID,
@@ -274,4 +296,195 @@ func (c *Cx1Client) RemoveUserFromGroup(user *User, groupId string) error {
 		// TODO: should user structure be updated to remove the group also? (iterate over list & remove element?)
 	}
 	return nil
+}
+
+func (u *User) HasRole(role *Role) bool {
+	return u.HasRoleByID(role.RoleID)
+}
+func (u *User) HasRoleByID(roleID string) bool {
+	for _, r := range u.Roles {
+		if r.RoleID == roleID {
+			return true
+		}
+	}
+	return false
+}
+func (u *User) HasRoleByName(role string) bool {
+	for _, r := range u.Roles {
+		if r.Name == role {
+			return true
+		}
+	}
+	return false
+}
+
+// New generic functions for roles for convenience
+func (c *Cx1Client) GetUserRoles(user *User) ([]Role, error) {
+	appRoles, err := c.GetUserAppRoles(user)
+	if err != nil {
+		return []Role{}, nil
+	}
+
+	iamRoles, err := c.GetUserIAMRoles(user)
+	if err != nil {
+		return []Role{}, nil
+	}
+
+	user.Roles = append(appRoles, iamRoles...)
+
+	return user.Roles, nil
+}
+
+func (c *Cx1Client) AddUserRoles(user *User, roles *[]Role) error {
+	appRoles := []Role{}
+	iamRoles := []Role{}
+
+	for _, r := range *roles {
+		if r.ClientID == c.GetASTAppID() {
+			appRoles = append(appRoles, r)
+		} else if r.ClientID == c.GetTenantID() {
+			iamRoles = append(iamRoles, r)
+		} else {
+			c.logger.Errorf("Request to add role to unhandled client ID: %v", r.String())
+		}
+	}
+
+	if len(appRoles) > 0 {
+		err := c.AddUserAppRoles(user, &appRoles)
+		if err != nil {
+			return fmt.Errorf("failed to add application roles: %s", err)
+		}
+	}
+
+	if len(iamRoles) > 0 {
+		err := c.AddUserIAMRoles(user, &iamRoles)
+		if err != nil {
+			return fmt.Errorf("failed to add IAM roles: %s", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Cx1Client) RemoveUserRoles(user *User, roles *[]Role) error {
+	appRoles := []Role{}
+	iamRoles := []Role{}
+
+	for _, r := range *roles {
+		if r.ClientID == c.GetASTAppID() {
+			appRoles = append(appRoles, r)
+		} else if r.ClientID == c.GetTenantID() {
+			iamRoles = append(iamRoles, r)
+		} else {
+			c.logger.Errorf("Request to remove role from unhandled client ID: %v", r.String())
+		}
+	}
+
+	if len(appRoles) > 0 {
+		err := c.RemoveUserAppRoles(user, &appRoles)
+		if err != nil {
+			return fmt.Errorf("failed to remove application roles: %s", err)
+		}
+	}
+
+	if len(iamRoles) > 0 {
+		err := c.RemoveUserIAMRoles(user, &iamRoles)
+		if err != nil {
+			return fmt.Errorf("failed to remove IAM roles: %s", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Cx1Client) GetUserAppRoles(user *User) ([]Role, error) {
+	return c.getUserRolesByClientID(user.UserID, c.GetASTAppID())
+}
+func (c *Cx1Client) AddUserAppRoles(user *User, roles *[]Role) error {
+	return c.addUserRolesByClientID(user.UserID, c.GetASTAppID(), roles)
+}
+func (c *Cx1Client) RemoveUserAppRoles(user *User, roles *[]Role) error {
+	return c.removeUserRolesByClientID(user.UserID, c.GetASTAppID(), roles)
+}
+
+func (c *Cx1Client) GetUserIAMRoles(user *User) ([]Role, error) {
+	return c.getUserKCRoles(user.UserID)
+}
+func (c *Cx1Client) AddUserIAMRoles(user *User, roles *[]Role) error {
+	return c.addUserKCRoles(user.UserID, roles)
+}
+func (c *Cx1Client) RemoveUserIAMRoles(user *User, roles *[]Role) error {
+	return c.removeUserKCRoles(user.UserID, roles)
+}
+
+func (c *Cx1Client) getUserRolesByClientID(userID string, clientID string) ([]Role, error) {
+	c.logger.Debugf("Get Cx1 Rolemappings for userid %v and clientid %v", userID, clientID)
+
+	var roles []Role
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/clients/%v", userID, clientID), nil, nil)
+	if err != nil {
+		return roles, err
+	}
+	err = json.Unmarshal(response, &roles)
+	return roles, err
+}
+func (c *Cx1Client) addUserRolesByClientID(userID string, clientID string, roles *[]Role) error {
+	c.logger.Debugf("Add Cx1 Rolemappings for userid %v and clientid %v", userID, clientID)
+
+	jsonBody, err := json.Marshal(roles)
+	if err != nil {
+		c.logger.Tracef("Failed to marshal roles: %s", err)
+		return err
+	}
+
+	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/clients/%v", userID, clientID), bytes.NewReader(jsonBody), nil)
+	return err
+}
+func (c *Cx1Client) removeUserRolesByClientID(userID string, clientID string, roles *[]Role) error {
+	c.logger.Debugf("Add Cx1 Rolemappings for userid %v and clientid %v", userID, clientID)
+
+	jsonBody, err := json.Marshal(roles)
+	if err != nil {
+		c.logger.Tracef("Failed to marshal roles: %s", err)
+		return err
+	}
+
+	_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/clients/%v", userID, clientID), bytes.NewReader(jsonBody), nil)
+	return err
+}
+
+func (c *Cx1Client) getUserKCRoles(userID string) ([]Role, error) {
+	c.logger.Debugf("Get Cx1 Tenant realm Rolemappings for userid %v", userID)
+
+	var roles []Role
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/realm", userID), nil, nil)
+	if err != nil {
+		return roles, err
+	}
+	err = json.Unmarshal(response, &roles)
+	return roles, err
+}
+func (c *Cx1Client) addUserKCRoles(userID string, roles *[]Role) error {
+	c.logger.Debugf("Add Cx1 Tenant realm Rolemappings for userid %v and clientid %v", userID)
+
+	jsonBody, err := json.Marshal(roles)
+	if err != nil {
+		c.logger.Tracef("Failed to marshal roles: %s", err)
+		return err
+	}
+
+	_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/realm", userID), bytes.NewReader(jsonBody), nil)
+	return err
+}
+func (c *Cx1Client) removeUserKCRoles(userID string, roles *[]Role) error {
+	c.logger.Debugf("Add Cx1 Tenant realm Rolemappings for userid %v and clientid %v", userID)
+
+	jsonBody, err := json.Marshal(roles)
+	if err != nil {
+		c.logger.Tracef("Failed to marshal roles: %s", err)
+		return err
+	}
+
+	_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/realm", userID), bytes.NewReader(jsonBody), nil)
+	return err
 }

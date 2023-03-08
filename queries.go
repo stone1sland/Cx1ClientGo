@@ -39,14 +39,14 @@ func (c *Cx1Client) GetQueries() (QueryCollection, error) {
 	}
 
 	for _, q := range queries {
-		ql := qc.GetQueryLanguage(q.Language)
+		ql := qc.GetQueryLanguageByName(q.Language)
 
 		if ql == nil {
 			qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
 			ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
 		}
 
-		qg := ql.GetQueryGroup(q.Group)
+		qg := ql.GetQueryGroupByName(q.Group)
 		if qg == nil {
 			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q}})
 		} else {
@@ -57,7 +57,7 @@ func (c *Cx1Client) GetQueries() (QueryCollection, error) {
 	return qc, err
 }
 
-func (qg *QueryGroup) GetQuery(name string) *Query {
+func (qg *QueryGroup) GetQueryByName(name string) *Query {
 	for id, q := range qg.Queries {
 		if strings.EqualFold(q.Name, name) {
 			return &qg.Queries[id]
@@ -66,7 +66,7 @@ func (qg *QueryGroup) GetQuery(name string) *Query {
 	return nil
 }
 
-func (ql *QueryLanguage) GetQueryGroup(name string) *QueryGroup {
+func (ql *QueryLanguage) GetQueryGroupByName(name string) *QueryGroup {
 	for id, qg := range ql.QueryGroups {
 		if strings.EqualFold(qg.Name, name) {
 			return &ql.QueryGroups[id]
@@ -74,7 +74,7 @@ func (ql *QueryLanguage) GetQueryGroup(name string) *QueryGroup {
 	}
 	return nil
 }
-func (qc *QueryCollection) GetQueryLanguage(language string) *QueryLanguage {
+func (qc *QueryCollection) GetQueryLanguageByName(language string) *QueryLanguage {
 	for id, ql := range qc.QueryLanguages {
 		if strings.EqualFold(ql.Name, language) {
 			return &qc.QueryLanguages[id]
@@ -82,16 +82,16 @@ func (qc *QueryCollection) GetQueryLanguage(language string) *QueryLanguage {
 	}
 	return nil
 }
-func (qc *QueryCollection) GetQuery(language, group, query string) *Query {
-	ql := qc.GetQueryLanguage(language)
+func (qc *QueryCollection) GetQueryByName(language, group, query string) *Query {
+	ql := qc.GetQueryLanguageByName(language)
 	if ql == nil {
 		return nil
 	}
-	qg := ql.GetQueryGroup(group)
+	qg := ql.GetQueryGroupByName(group)
 	if qg == nil {
 		return nil
 	}
-	return qg.GetQuery(query)
+	return qg.GetQueryByName(query)
 }
 
 func (qc *QueryCollection) GetQueryByID(qid uint64) *Query {

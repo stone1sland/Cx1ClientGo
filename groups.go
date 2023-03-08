@@ -147,7 +147,6 @@ func (c *Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
 
 func (c *Cx1Client) DeleteGroup(group *Group) error {
 	c.logger.Debugf("Deleting Group %v...", group.String())
-
 	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/groups/%v", group.GroupID), nil, http.Header{})
 	return err
 }
@@ -205,7 +204,7 @@ func (c *Cx1Client) UpdateGroup(g *Group) error {
 	return err
 }
 
-func (g *Group) AddRole(client, new_role string) error {
+func (g *Group) AddRoleByID(client, new_role string) error {
 	if !g.Filled {
 		return fmt.Errorf("group is not filled, first fetch the details via GetGroupByID")
 	}
@@ -230,7 +229,7 @@ func (g *Group) AddRole(client, new_role string) error {
 	return nil
 }
 
-func (g *Group) RemoveRole(client, del_role string) error {
+func (g *Group) RemoveRoleByID(client, del_role string) error {
 	if !g.Filled {
 		return fmt.Errorf("group %v is not filled, first fetch the details via GetGroupByID", g.String())
 	}
@@ -302,12 +301,12 @@ func (c *Cx1Client) groupRoleChange(g *Group) error {
 		}
 	}
 
-	err = c.DeleteRolesFromGroup(g, del_roles)
+	err = c.DeleteRolesFromGroupByID(g, del_roles)
 	if err != nil {
 		return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
 	}
 
-	err = c.AddRolesToGroup(g, add_roles)
+	err = c.AddRolesToGroupByID(g, add_roles)
 	if err != nil {
 		return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
 	}
@@ -315,7 +314,7 @@ func (c *Cx1Client) groupRoleChange(g *Group) error {
 	return nil
 }
 
-func (c *Cx1Client) DeleteRolesFromGroup(g *Group, clientRoles map[string][]string) error {
+func (c *Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -350,7 +349,7 @@ func (c *Cx1Client) DeleteRolesFromGroup(g *Group, clientRoles map[string][]stri
 
 	return nil
 }
-func (c *Cx1Client) AddRolesToGroup(g *Group, clientRoles map[string][]string) error {
+func (c *Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -388,6 +387,10 @@ func (c *Cx1Client) AddRolesToGroup(g *Group, clientRoles map[string][]string) e
 
 // convenience
 func (c *Cx1Client) GetOrCreateGroup(name string) (Group, error) {
+	c.depwarn("GetOrCreateGroup", "GetOrCreateGroupByName")
+	return c.GetOrCreateGroupByName(name)
+}
+func (c *Cx1Client) GetOrCreateGroupByName(name string) (Group, error) {
 	group, err := c.GetGroupByName(name)
 	if err != nil {
 		group, err = c.CreateGroup(name)

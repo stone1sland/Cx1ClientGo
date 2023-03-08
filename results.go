@@ -9,6 +9,10 @@ import (
 )
 
 func (c *Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, error) {
+	c.depwarn("GetScanResults", "GetScanResultsByID")
+	return c.GetScanResultsByID(scanID, limit)
+}
+func (c *Cx1Client) GetScanResultsByID(scanID string, limit uint64) ([]ScanResult, error) {
 	c.logger.Debug("Get Cx1 Scan Results")
 	var resultResponse struct {
 		Results    []ScanResult
@@ -46,6 +50,11 @@ func (c *Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, e
 }
 
 func (c *Cx1Client) GetScanResultsCount(scanID string) (uint64, error) {
+	c.depwarn("GetScanResultsCount", "GetScanResultsCountByID")
+	return c.GetScanResultsCountByID(scanID)
+}
+
+func (c *Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
 	c.logger.Debug("Get Cx1 Scan Results")
 	var resultResponse struct {
 		//Results    []ScanResult
@@ -90,6 +99,11 @@ func (c *Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
 }
 
 func (c *Cx1Client) GetResultsPredicates(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
+	c.depwarn("GetResultsPredicates", "GetResultsPredicatesByID")
+	return c.GetResultsPredicatesByID(SimilarityID, ProjectID)
+}
+
+func (c *Cx1Client) GetResultsPredicatesByID(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
 	c.logger.Debugf("Fetching results predicates for project %v similarityId %d", ProjectID, SimilarityID)
 
 	var Predicates struct {
