@@ -1,6 +1,6 @@
-This is a basic CheckmarxOne REST API client written in GoLang
+This is a basic CheckmarxOne REST API client written in GoLang. It already covers much of the CheckmarxOne API allowing Read operations on Applications, Clients, Groups, Presets, Projects, Queries, Reports, Results, Roles, Scans, and Users. Many of these include full CRUD support but this is still a work in progress.
 
-There are many gaps in the functionality so this is best used as an example for custom work, however if you wish to contribute then feel free to submit additions.
+Feel free to use or modify this code, open issues, or submit pull requests. 
 
 Basic usage:
 
@@ -126,7 +126,7 @@ func main() {
 	scanConfig.ScanType = "sast"
 	scanConfig.Values = map[string]string{ "incremental" : "false" }
 	
-	scan, err := cx1client.ScanProjectGit( project.ProjectID, project_repo, branch_name, []Cx1ClientGo.ScanConfiguration{scanConfig}, map[string]string{ "CreatedBy" : "Cx1ClientGo" } )
+	scan, err := cx1client.ScanProjectGitByID( project.ProjectID, project_repo, branch_name, []Cx1ClientGo.ScanConfiguration{scanConfig}, map[string]string{ "CreatedBy" : "Cx1ClientGo" } )
 	
 	if err != nil {
 		logger.Errorf( "Failed to trigger scan with repository '%v' branch '%v': %s", project_repo, branch_name, err )
@@ -136,7 +136,7 @@ func main() {
 	logger.Infof( "Triggered scan %v, polling status", scan.ScanID )
 	for scan.Status == "Running" {
 		time.Sleep( 10 * time.Second )
-		scan, err = cx1client.GetScan( scan.ScanID )
+		scan, err = cx1client.GetScanByID( scan.ScanID )
 		if err != nil {
 			logger.Errorf( "Failed to get scan status: %v", err )
 			return
@@ -144,7 +144,7 @@ func main() {
 		logger.Infof( " - %v", scan.Status )
 	}
 	
-	reportID, err := cx1client.RequestNewReport( scan.ScanID, project.ProjectID, branch_name, "pdf" )
+	reportID, err := cx1client.RequestNewReportByID( scan.ScanID, project.ProjectID, branch_name, "pdf" )
 	if err != nil {
 		logger.Errorf( "Failed to trigger new report generation for scan ID %v, project ID %v: %s", scan.ScanID, project.ProjectID, err )
 		return
@@ -155,7 +155,7 @@ func main() {
 	
 	for status.Status != "completed" {
 		time.Sleep( 10 * time.Second )
-		status, err = cx1client.GetReportStatus( reportID )
+		status, err = cx1client.GetReportStatusByID( reportID )
 		if err != nil {
 			logger.Errorf( "Failed to get report status: %v", err )
 			return
@@ -178,7 +178,7 @@ func main() {
 	}
 	logger.Info( "Report Updated to report.pdf" )
 	
-	scanresults, err := cx1client.GetScanResults( scan.ScanID )
+	scanresults, err := cx1client.GetScanResultsByID( scan.ScanID )
 	if err != nil && len(scanresults) == 0 {
 		logger.Errorf( "Failed to retrieve scan results: %s", err )
 		return
