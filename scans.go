@@ -228,7 +228,7 @@ func (c *Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 	scan := *s
 	for scan.Status == "Running" {
 		time.Sleep(10 * time.Second)
-		scan, err = c.GetScan(scan.ScanID)
+		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
 			c.logger.Tracef("Failed to get scan status: %v", err)
 			return scan, err
