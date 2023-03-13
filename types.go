@@ -132,6 +132,7 @@ type KeyCloakClient struct {
 	Enabled  bool
 }
 type Role struct {
+	ClientID    string `json:"containerId"` // the 'client' in Keycloak - AST roles with have the "ast-app" client ID
 	RoleID      string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -141,9 +142,9 @@ type Role struct {
 		Category   []string
 		LastUpdate []string // it is returned as [ "uint",... ]
 	} `json:"attributes"`
-	Composite  bool `json:"composite"`
-	ClientRole bool `json:"clientRole"`
-	SubRoles   []Role
+	Composite  bool   `json:"composite"`
+	ClientRole bool   `json:"clientRole"`
+	SubRoles   []Role `json:"-"`
 }
 
 type Scan struct {
@@ -294,14 +295,14 @@ type Status struct {
 }
 
 type User struct {
-	Enabled   bool     `json:"enabled"`
-	UserID    string   `json:"id,omitempty"`
-	FirstName string   `json:"firstName"`
-	LastName  string   `json:"lastName"`
-	UserName  string   `json:"username"`
-	Email     string   `json:"email"`
-	Groups    []Group  `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
-	Roles     []string `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
+	Enabled   bool    `json:"enabled"`
+	UserID    string  `json:"id,omitempty"`
+	FirstName string  `json:"firstName"`
+	LastName  string  `json:"lastName"`
+	UserName  string  `json:"username"`
+	Email     string  `json:"email"`
+	Groups    []Group `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
+	Roles     []Role  `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
 }
 
 type WorkflowLog struct {

@@ -11,10 +11,12 @@ import (
 	"time"
 )
 
-// Scans
-// GetScans returns all scan status on the project addressed by projectID
-// todo cleanup systeminstance
 func (c *Cx1Client) GetScan(scanID string) (Scan, error) {
+	c.depwarn("GetScan", "GetScanByID")
+	return c.GetScanByID(scanID)
+}
+
+func (c *Cx1Client) GetScanByID(scanID string) (Scan, error) {
 	var scan Scan
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans/%v", scanID), nil, nil)
@@ -28,6 +30,11 @@ func (c *Cx1Client) GetScan(scanID string) (Scan, error) {
 }
 
 func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
+	c.depwarn("GetScanMetadata", "GetScanMetadataByID")
+	return c.GetScanMetadataByID(scanID)
+}
+
+func (c *Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 	var scanmeta ScanMetadata
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-metadata/%v", scanID), nil, http.Header{})
@@ -52,6 +59,11 @@ func (s *ScanSummary) TotalCount() uint64 {
 }
 
 func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
+	c.depwarn("GetScanSummary", "GetScanSummaryByID")
+	return c.GetScanSummaryByID(scanID)
+}
+
+func (c *Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
 	var ScansSummaries struct {
 		ScanSum    []ScanSummary `json:"scansSummaries"`
 		TotalCount uint64
@@ -88,6 +100,10 @@ func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
 }
 
 func (c *Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {
+	c.depwarn("GetScanLogs", "GetScanLogsByID")
+	return c.GetScanLogsByID(scanID, engine)
+}
+func (c *Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
 	c.logger.Debugf("Fetching scan logs for scan %v", scanID)
 
 	response, err := c.sendRequestRawCx1(http.MethodGet, fmt.Sprintf("/logs/%v/%v", scanID, engine), nil, nil)
@@ -130,6 +146,11 @@ func (c *Cx1Client) scanProject(scanConfig map[string]interface{}) (Scan, error)
 }
 
 func (c *Cx1Client) ScanProjectZip(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+	c.depwarn("ScanProjectZip", "ScanProjectZipByID")
+	return c.ScanProjectZipByID(projectID, sourceUrl, branch, settings, tags)
+}
+
+func (c *Cx1Client) ScanProjectZipByID(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	jsonBody := map[string]interface{}{
 		"project": map[string]interface{}{"id": projectID},
 		"type":    "upload",
@@ -149,6 +170,11 @@ func (c *Cx1Client) ScanProjectZip(projectID, sourceUrl, branch string, settings
 }
 
 func (c *Cx1Client) ScanProjectGit(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+	c.depwarn("ScanProjectGit", "ScanProjectGitByID")
+	return c.ScanProjectGitByID(projectID, repoUrl, branch, settings, tags)
+}
+
+func (c *Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	jsonBody := map[string]interface{}{
 		"project": map[string]interface{}{"id": projectID},
 		"type":    "git",
@@ -169,6 +195,11 @@ func (c *Cx1Client) ScanProjectGit(projectID, repoUrl, branch string, settings [
 
 // convenience function
 func (c *Cx1Client) ScanProject(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+	c.depwarn("ScanProject", "ScanProjectByID")
+	return c.ScanProjectByID(projectID, sourceUrl, branch, scanType, settings, tags)
+}
+
+func (c *Cx1Client) ScanProjectByID(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	if scanType == "upload" {
 		return c.ScanProjectZip(projectID, sourceUrl, branch, settings, tags)
 	} else if scanType == "git" {
@@ -197,7 +228,7 @@ func (c *Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 	scan := *s
 	for scan.Status == "Running" {
 		time.Sleep(10 * time.Second)
-		scan, err = c.GetScan(scan.ScanID)
+		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
 			c.logger.Tracef("Failed to get scan status: %v", err)
 			return scan, err
@@ -240,14 +271,6 @@ func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
 		return "", err
 	}
 
-	/*cx1_req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader(fileContents))
-	if err != nil {
-		c.logger.Tracef("Error: %s", err)
-		return "", err
-	}
-
-	cx1_req.Header.Add("Content-Type", "application/zip")
-	cx1_req.Header.Add("Authorization", fmt.Sprintf("Bearer %v", c.authToken))*/
 	header := http.Header{}
 	header.Add("Content-Type", "application/zip")
 

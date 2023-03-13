@@ -101,7 +101,7 @@ func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
 	var err error
 	if !c.RoleRefresh {
 		c.RoleRefresh = true
-		c.Roles, err = client.GetCombinedRoles()
+		c.Roles, err = client.GetRoles()
 		if err != nil {
 			client.logger.Tracef("Failed while retrieving roles: %s", err)
 		} else {
@@ -109,7 +109,7 @@ func (c *Cx1Cache) RefreshRoles(client *Cx1Client) error {
 				var role Role
 				var err error
 				if r.ClientRole {
-					role, err = client.GetASTRoleByName(r.Name)
+					role, err = client.GetAppRoleByName(r.Name)
 				}
 				c.Roles[id].Attributes = role.Attributes
 				if err != nil {
@@ -259,15 +259,15 @@ func (c *Cx1Cache) GetQuery(queryID uint64) (*Query, error) {
 	return nil, fmt.Errorf("no such query %d", queryID)
 }
 func (c *Cx1Cache) GetQueryByNames(language, group, query string) (*Query, error) {
-	ql := c.Queries.GetQueryLanguage(language)
+	ql := c.Queries.GetQueryLanguageByName(language)
 	if ql == nil {
 		return nil, fmt.Errorf("no such language %v", language)
 	}
-	qg := ql.GetQueryGroup(group)
+	qg := ql.GetQueryGroupByName(group)
 	if qg == nil {
 		return nil, fmt.Errorf("no such group %v", group)
 	}
-	q := qg.GetQuery(query)
+	q := qg.GetQueryByName(query)
 	if q == nil {
 		return nil, fmt.Errorf("no such query %v", query)
 	}

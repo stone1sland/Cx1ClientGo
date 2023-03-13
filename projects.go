@@ -149,6 +149,11 @@ func (c *Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Proje
 }
 
 func (c *Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string) ([]Project, error) {
+	c.depwarn("GetProjectsByNameAndGroup", "GetProjectsByNameAndGroupID")
+	return c.GetProjectsByNameAndGroupID(projectName, groupID)
+}
+
+func (c *Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID string) ([]Project, error) {
 	c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
 
 	var projectResponse struct {
@@ -184,7 +189,7 @@ func (c *Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string
 }
 
 // convenience
-func (p *Project) IsInGroup(groupId string) bool {
+func (p *Project) IsInGroupID(groupId string) bool {
 	for _, g := range p.Groups {
 		if g == groupId {
 			return true
@@ -193,7 +198,16 @@ func (p *Project) IsInGroup(groupId string) bool {
 	return false
 }
 
+func (p *Project) IsInGroup(group *Group) bool {
+	return p.IsInGroupID(group.GroupID)
+}
+
 func (c *Cx1Client) GetProjectConfiguration(projectID string) ([]ProjectConfigurationSetting, error) {
+	c.depwarn("GetProjectConfiguration", "GetProjectConfigurationByID")
+	return c.GetProjectConfigurationByID(projectID)
+}
+
+func (c *Cx1Client) GetProjectConfigurationByID(projectID string) ([]ProjectConfigurationSetting, error) {
 	c.logger.Debug("Getting project configuration")
 	var projectConfigurations []ProjectConfigurationSetting
 	params := url.Values{
@@ -212,6 +226,11 @@ func (c *Cx1Client) GetProjectConfiguration(projectID string) ([]ProjectConfigur
 
 // UpdateProjectConfiguration updates the configuration of the project addressed by projectID
 func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []ProjectConfigurationSetting) error {
+	c.depwarn("UpdateProjectConfiguration", "UpdateProjectConfigurationByID")
+	return c.UpdateProjectConfigurationByID(projectID, settings)
+}
+
+func (c *Cx1Client) UpdateProjectConfigurationByID(projectID string, settings []ProjectConfigurationSetting) error {
 	if len(settings) == 0 {
 		return fmt.Errorf("empty list of settings provided")
 	}
@@ -235,6 +254,11 @@ func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []Proj
 }
 
 func (c *Cx1Client) SetProjectBranch(projectID, branch string, allowOverride bool) error {
+	c.depwarn("SetProjectBranch", "SetProjectBranchByID")
+	return c.SetProjectBranchByID(projectID, branch, allowOverride)
+}
+
+func (c *Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.handler.git.branch"
 	setting.Value = branch
@@ -244,6 +268,11 @@ func (c *Cx1Client) SetProjectBranch(projectID, branch string, allowOverride boo
 }
 
 func (c *Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride bool) error {
+	c.depwarn("SetProjectPreset", "SetProjectPresetByID")
+	return c.SetProjectPresetByID(projectID, presetName, allowOverride)
+}
+
+func (c *Cx1Client) SetProjectPresetByID(projectID, presetName string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.config.sast.presetName"
 	setting.Value = presetName
@@ -253,6 +282,11 @@ func (c *Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride
 }
 
 func (c *Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allowOverride bool) error {
+	c.depwarn("SetProjectLanguageMode", "SetProjectLanguageModeByID")
+	return c.SetProjectLanguageModeByID(projectID, languageMode, allowOverride)
+}
+
+func (c *Cx1Client) SetProjectLanguageModeByID(projectID, languageMode string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.config.sast.languageMode"
 	setting.Value = languageMode
@@ -262,6 +296,11 @@ func (c *Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allow
 }
 
 func (c *Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride bool) error {
+	c.depwarn("SetProjectFileFilter", "SetProjectFileFilterByID")
+	return c.SetProjectFileFilterByID(projectID, filter, allowOverride)
+}
+
+func (c *Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.config.sast.filter"
 	setting.Value = filter
@@ -274,6 +313,11 @@ func (c *Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride
 
 // GetScans returns all scan status on the project addressed by projectID
 func (c *Cx1Client) GetLastScans(projectID string, limit int) ([]Scan, error) {
+	c.depwarn("GetLastScans", "GetLastScansByID")
+	return c.GetLastScansByID(projectID, limit)
+}
+
+func (c *Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error) {
 	var scanResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64
@@ -299,6 +343,10 @@ func (c *Cx1Client) GetLastScans(projectID string, limit int) ([]Scan, error) {
 
 // GetScans returns all scan status on the project addressed by projectID
 func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string) ([]Scan, error) {
+	c.depwarn("GetLastScansByStatus", "GetLastScansByStatusAndID")
+	return c.GetLastScansByStatusAndID(projectID, limit, status)
+}
+func (c *Cx1Client) GetLastScansByStatusAndID(projectID string, limit int, status []string) ([]Scan, error) {
 	var scanResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64
@@ -399,13 +447,18 @@ func (c *Cx1Client) DeleteProject(p *Project) error {
 }
 
 func (p *Project) AssignGroup(group *Group) {
-	if p.IsInGroup(group.GroupID) {
+	if p.IsInGroup(group) {
 		return
 	}
 	p.Groups = append(p.Groups, group.GroupID)
 }
 
 func (c *Cx1Client) GetOrCreateProject(name string) (Project, error) {
+	c.depwarn("GetOrCreateProject", "GetOrCreateProjectByName")
+	return c.GetOrCreateProjectByName(name)
+}
+
+func (c *Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {
 	project, err := c.GetProjectByName(name)
 	if err == nil {
 		return project, nil
