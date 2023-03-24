@@ -13,7 +13,7 @@ func (g *Group) String() string {
 	return fmt.Sprintf("[%v] %v", ShortenGUID(g.GroupID), g.Name)
 }
 
-func (c *Cx1Client) CreateGroup(groupname string) (Group, error) {
+func (c Cx1Client) CreateGroup(groupname string) (Group, error) {
 	c.logger.Debugf("Create Group: %v ", groupname)
 	data := map[string]interface{}{
 		"name": groupname,
@@ -32,7 +32,7 @@ func (c *Cx1Client) CreateGroup(groupname string) (Group, error) {
 	return c.GetGroupByName(groupname)
 }
 
-func (c *Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) (Group, error) {
+func (c Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) (Group, error) {
 	c.logger.Debugf("Create child Group: %v ", childGroupName)
 	var child_group Group
 	data := map[string]interface{}{
@@ -60,7 +60,7 @@ func (c *Cx1Client) CreateChildGroup(parentGroup *Group, childGroupName string) 
 	return child_group, err
 }
 
-func (c *Cx1Client) GetGroupsPIP() ([]Group, error) {
+func (c Cx1Client) GetGroupsPIP() ([]Group, error) {
 	c.logger.Debug("Get cx1 groups pip")
 	var groups []Group
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth", "/pip/groups", nil, nil)
@@ -72,7 +72,7 @@ func (c *Cx1Client) GetGroupsPIP() ([]Group, error) {
 	return groups, err
 }
 
-func (c *Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
+func (c Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
 	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
 
 	groups, err := c.GetGroupsPIP()
@@ -89,7 +89,7 @@ func (c *Cx1Client) GetGroupPIPByName(groupname string) (Group, error) {
 	return Group{}, fmt.Errorf("no such group %v found", groupname)
 }
 
-func (c *Cx1Client) GetGroups() ([]Group, error) {
+func (c Cx1Client) GetGroups() ([]Group, error) {
 	c.logger.Debug("Get Cx1 Groups")
 	var groups []Group
 
@@ -103,7 +103,7 @@ func (c *Cx1Client) GetGroups() ([]Group, error) {
 	return groups, err
 }
 
-func (c *Cx1Client) GetGroupByName(groupname string) (Group, error) {
+func (c Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=true&search=%v", url.PathEscape(groupname)), nil, nil)
 	if err != nil {
@@ -134,7 +134,7 @@ func (c *Cx1Client) GetGroupByName(groupname string) (Group, error) {
 	return Group{}, fmt.Errorf("no group %v found", groupname)
 }
 
-func (c *Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
+func (c Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
 	c.logger.Debugf("Get Cx1 Group by name: %v", groupname)
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/groups?briefRepresentation=true&search=%v", url.PathEscape(groupname)), nil, nil)
 	if err != nil {
@@ -145,13 +145,13 @@ func (c *Cx1Client) GetGroupsByName(groupname string) ([]Group, error) {
 	return groups, err
 }
 
-func (c *Cx1Client) DeleteGroup(group *Group) error {
+func (c Cx1Client) DeleteGroup(group *Group) error {
 	c.logger.Debugf("Deleting Group %v...", group.String())
 	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/groups/%v", group.GroupID), nil, http.Header{})
 	return err
 }
 
-func (c *Cx1Client) GetGroupByID(groupID string) (Group, error) {
+func (c Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	c.logger.Debugf("Getting Group with ID %v...", groupID)
 	var group Group
 
@@ -170,11 +170,11 @@ func (c *Cx1Client) GetGroupByID(groupID string) (Group, error) {
 	return group, err
 }
 
-func (c *Cx1Client) GroupLink(g *Group) string {
+func (c Cx1Client) GroupLink(g *Group) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/groups/%v", c.iamUrl, c.tenant, c.tenant, g.GroupID)
 }
 
-func (c *Cx1Client) SetGroupParent(g *Group, parent *Group) error {
+func (c Cx1Client) SetGroupParent(g *Group, parent *Group) error {
 	body := map[string]string{
 		"id":   g.GroupID,
 		"name": g.Name,
@@ -189,7 +189,7 @@ func (c *Cx1Client) SetGroupParent(g *Group, parent *Group) error {
 	return nil
 }
 
-func (c *Cx1Client) UpdateGroup(g *Group) error {
+func (c Cx1Client) UpdateGroup(g *Group) error {
 	if !g.Filled {
 		return fmt.Errorf("group %v data is not filled (use GetGroupByID) - may be missing expected roles & subgroups, update aborted", g.String())
 	}
@@ -254,7 +254,7 @@ func (g *Group) RemoveRoleByID(client, del_role string) error {
 	return fmt.Errorf("group %v does not have the %v - %v role", g.String(), client, del_role)
 }
 
-func (c *Cx1Client) groupRoleChange(g *Group) error {
+func (c Cx1Client) groupRoleChange(g *Group) error {
 	orig_group, err := c.GetGroupByID(g.GroupID)
 	if err != nil {
 		return fmt.Errorf("failed to get original group info for group %v: %s", g.String(), err)
@@ -314,7 +314,7 @@ func (c *Cx1Client) groupRoleChange(g *Group) error {
 	return nil
 }
 
-func (c *Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]string) error {
+func (c Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -349,7 +349,7 @@ func (c *Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]
 
 	return nil
 }
-func (c *Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string) error {
+func (c Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -386,11 +386,11 @@ func (c *Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]strin
 }
 
 // convenience
-func (c *Cx1Client) GetOrCreateGroup(name string) (Group, error) {
+func (c Cx1Client) GetOrCreateGroup(name string) (Group, error) {
 	c.depwarn("GetOrCreateGroup", "GetOrCreateGroupByName")
 	return c.GetOrCreateGroupByName(name)
 }
-func (c *Cx1Client) GetOrCreateGroupByName(name string) (Group, error) {
+func (c Cx1Client) GetOrCreateGroupByName(name string) (Group, error) {
 	group, err := c.GetGroupByName(name)
 	if err != nil {
 		group, err = c.CreateGroup(name)

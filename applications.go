@@ -10,7 +10,7 @@ import (
 )
 
 // Applications
-func (c *Cx1Client) GetApplications(limit uint) ([]Application, error) {
+func (c Cx1Client) GetApplications(limit uint) ([]Application, error) {
 	c.logger.Debug("Get Cx1 Applications")
 	var ApplicationResponse struct {
 		TotalCount    uint64
@@ -35,7 +35,7 @@ func (c *Cx1Client) GetApplications(limit uint) ([]Application, error) {
 	return ApplicationResponse.Applications, err
 }
 
-func (c *Cx1Client) GetApplicationsByName(name string, limit uint64) ([]Application, error) {
+func (c Cx1Client) GetApplicationsByName(name string, limit uint64) ([]Application, error) {
 	c.logger.Debugf("Get Cx1 Applications by name: %v", name)
 
 	var ApplicationResponse struct {
@@ -61,7 +61,7 @@ func (c *Cx1Client) GetApplicationsByName(name string, limit uint64) ([]Applicat
 	return ApplicationResponse.Applications, err
 }
 
-func (c *Cx1Client) GetApplicationByName(name string) (Application, error) {
+func (c Cx1Client) GetApplicationByName(name string) (Application, error) {
 	apps, err := c.GetApplicationsByName(name, 0)
 	if err != nil {
 		return Application{}, err
@@ -76,7 +76,7 @@ func (c *Cx1Client) GetApplicationByName(name string) (Application, error) {
 	return Application{}, fmt.Errorf("no application found named %v", name)
 }
 
-func (c *Cx1Client) CreateApplication(appname string) (Application, error) {
+func (c Cx1Client) CreateApplication(appname string) (Application, error) {
 	c.logger.Debugf("Create Application: %v", appname)
 	data := map[string]interface{}{
 		"name":        appname,
@@ -104,11 +104,11 @@ func (c *Cx1Client) CreateApplication(appname string) (Application, error) {
 	return app, err
 }
 
-func (c *Cx1Client) DeleteApplication(applicationId string) error {
+func (c Cx1Client) DeleteApplication(applicationId string) error {
 	c.depwarn("DeleteApplication", "DeleteApplicationByID")
 	return c.DeleteApplicationByID(applicationId)
 }
-func (c *Cx1Client) DeleteApplicationByID(applicationId string) error {
+func (c Cx1Client) DeleteApplicationByID(applicationId string) error {
 	c.logger.Debugf("Delete Application: %v", applicationId)
 
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/applications/%v", applicationId), nil, nil)
@@ -121,7 +121,7 @@ func (c *Cx1Client) DeleteApplicationByID(applicationId string) error {
 }
 
 // convenience
-func (c *Cx1Client) GetApplicationCount() (uint64, error) {
+func (c Cx1Client) GetApplicationCount() (uint64, error) {
 	c.logger.Debug("Get Cx1 Projects")
 	var ApplicationResponse struct {
 		TotalCount         uint64
@@ -144,7 +144,7 @@ func (c *Cx1Client) GetApplicationCount() (uint64, error) {
 	return ApplicationResponse.TotalCount, err
 }
 
-func (c *Cx1Client) GetApplicationCountByName(name string) (uint64, error) {
+func (c Cx1Client) GetApplicationCountByName(name string) (uint64, error) {
 	c.logger.Debug("Get Cx1 Projects")
 	var ApplicationResponse struct {
 		TotalCount         uint64
@@ -171,11 +171,11 @@ func (a *Application) String() string {
 	return fmt.Sprintf("[%v] %v", ShortenGUID(a.ApplicationID), a.Name)
 }
 
-func (c *Cx1Client) GetOrCreateApplication(name string) (Application, error) {
+func (c Cx1Client) GetOrCreateApplication(name string) (Application, error) {
 	c.depwarn("GetOrCreateApplication", "GetOrCreateApplicationByName")
 	return c.GetOrCreateApplicationByName(name)
 }
-func (c *Cx1Client) GetOrCreateApplicationByName(name string) (Application, error) {
+func (c Cx1Client) GetOrCreateApplicationByName(name string) (Application, error) {
 	app, err := c.GetApplicationByName(name)
 	if err == nil {
 		return app, nil
@@ -184,7 +184,7 @@ func (c *Cx1Client) GetOrCreateApplicationByName(name string) (Application, erro
 	return c.CreateApplication(name)
 }
 
-func (c *Cx1Client) UpdateApplication(app *Application) error {
+func (c Cx1Client) UpdateApplication(app *Application) error {
 	c.logger.Debugf("Update application: %v", app.String())
 	jsonBody, err := json.Marshal(*app)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 )
 
 // Projects
-func (c *Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tags map[string]string) (Project, error) {
+func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tags map[string]string) (Project, error) {
 	c.logger.Debugf("Create Project: %v", projectname)
 	data := map[string]interface{}{
 		"name":        projectname,
@@ -59,7 +59,7 @@ func (p *Project) GetTags() string {
 	return str
 }
 
-func (c *Cx1Client) GetProjects(limit uint64) ([]Project, error) {
+func (c Cx1Client) GetProjects(limit uint64) ([]Project, error) {
 	c.logger.Debug("Get Cx1 Projects")
 	var ProjectResponse struct {
 		TotalCount    uint64
@@ -83,7 +83,7 @@ func (c *Cx1Client) GetProjects(limit uint64) ([]Project, error) {
 	return ProjectResponse.Projects, err
 }
 
-func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
+func (c Cx1Client) GetProjectByID(projectID string) (Project, error) {
 	c.logger.Debugf("Getting Project with ID %v...", projectID)
 	var project Project
 
@@ -93,10 +93,15 @@ func (c *Cx1Client) GetProjectByID(projectID string) (Project, error) {
 	}
 
 	err = json.Unmarshal([]byte(data), &project)
+	if err != nil {
+		return project, err
+	}
+
+	err = c.GetProjectConfiguration(&project)
 	return project, err
 }
 
-func (c *Cx1Client) GetProjectByName(projectname string) (Project, error) {
+func (c Cx1Client) GetProjectByName(projectname string) (Project, error) {
 	count, err := c.GetProjectCountByName(projectname)
 	if err != nil {
 		return Project{}, err
@@ -109,14 +114,15 @@ func (c *Cx1Client) GetProjectByName(projectname string) (Project, error) {
 
 	for _, p := range projects {
 		if p.Name == projectname {
-			return p, nil
+			err = c.GetProjectConfiguration(&p)
+			return p, err
 		}
 	}
 
 	return Project{}, fmt.Errorf("no project matching %v found", projectname)
 }
 
-func (c *Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Project, error) {
+func (c Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Project, error) {
 	c.logger.Debugf("Get Cx1 Projects By Name: %v", projectname)
 
 	body := url.Values{
@@ -148,12 +154,12 @@ func (c *Cx1Client) GetProjectsByName(projectname string, limit uint64) ([]Proje
 	return ProjectResponse.Projects, nil
 }
 
-func (c *Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string) ([]Project, error) {
+func (c Cx1Client) GetProjectsByNameAndGroup(projectName string, groupID string) ([]Project, error) {
 	c.depwarn("GetProjectsByNameAndGroup", "GetProjectsByNameAndGroupID")
 	return c.GetProjectsByNameAndGroupID(projectName, groupID)
 }
 
-func (c *Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID string) ([]Project, error) {
+func (c Cx1Client) GetProjectsByNameAndGroupID(projectName string, groupID string) ([]Project, error) {
 	c.logger.Debugf("Getting projects with name %v of group ID %v...", projectName, groupID)
 
 	var projectResponse struct {
@@ -202,12 +208,13 @@ func (p *Project) IsInGroup(group *Group) bool {
 	return p.IsInGroupID(group.GroupID)
 }
 
-func (c *Cx1Client) GetProjectConfiguration(projectID string) ([]ProjectConfigurationSetting, error) {
-	c.depwarn("GetProjectConfiguration", "GetProjectConfigurationByID")
-	return c.GetProjectConfigurationByID(projectID)
+func (c Cx1Client) GetProjectConfiguration(project *Project) error {
+	configurations, err := c.GetProjectConfigurationByID(project.ProjectID)
+	project.Configuration = configurations
+	return err
 }
 
-func (c *Cx1Client) GetProjectConfigurationByID(projectID string) ([]ProjectConfigurationSetting, error) {
+func (c Cx1Client) GetProjectConfigurationByID(projectID string) ([]ProjectConfigurationSetting, error) {
 	c.logger.Debug("Getting project configuration")
 	var projectConfigurations []ProjectConfigurationSetting
 	params := url.Values{
@@ -225,12 +232,12 @@ func (c *Cx1Client) GetProjectConfigurationByID(projectID string) ([]ProjectConf
 }
 
 // UpdateProjectConfiguration updates the configuration of the project addressed by projectID
-func (c *Cx1Client) UpdateProjectConfiguration(projectID string, settings []ProjectConfigurationSetting) error {
-	c.depwarn("UpdateProjectConfiguration", "UpdateProjectConfigurationByID")
-	return c.UpdateProjectConfigurationByID(projectID, settings)
+func (c Cx1Client) UpdateProjectConfiguration(project *Project, settings []ProjectConfigurationSetting) error {
+	project.Configuration = settings
+	return c.UpdateProjectConfigurationByID(project.ProjectID, settings)
 }
 
-func (c *Cx1Client) UpdateProjectConfigurationByID(projectID string, settings []ProjectConfigurationSetting) error {
+func (c Cx1Client) UpdateProjectConfigurationByID(projectID string, settings []ProjectConfigurationSetting) error {
 	if len(settings) == 0 {
 		return fmt.Errorf("empty list of settings provided")
 	}
@@ -253,54 +260,54 @@ func (c *Cx1Client) UpdateProjectConfigurationByID(projectID string, settings []
 	return nil
 }
 
-func (c *Cx1Client) SetProjectBranch(projectID, branch string, allowOverride bool) error {
+func (c Cx1Client) SetProjectBranch(projectID, branch string, allowOverride bool) error {
 	c.depwarn("SetProjectBranch", "SetProjectBranchByID")
 	return c.SetProjectBranchByID(projectID, branch, allowOverride)
 }
 
-func (c *Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride bool) error {
+func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.handler.git.branch"
 	setting.Value = branch
 	setting.AllowOverride = allowOverride
 
-	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
 }
 
-func (c *Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride bool) error {
+func (c Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride bool) error {
 	c.depwarn("SetProjectPreset", "SetProjectPresetByID")
 	return c.SetProjectPresetByID(projectID, presetName, allowOverride)
 }
 
-func (c *Cx1Client) SetProjectPresetByID(projectID, presetName string, allowOverride bool) error {
+func (c Cx1Client) SetProjectPresetByID(projectID, presetName string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.config.sast.presetName"
 	setting.Value = presetName
 	setting.AllowOverride = allowOverride
 
-	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
 }
 
-func (c *Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allowOverride bool) error {
+func (c Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allowOverride bool) error {
 	c.depwarn("SetProjectLanguageMode", "SetProjectLanguageModeByID")
 	return c.SetProjectLanguageModeByID(projectID, languageMode, allowOverride)
 }
 
-func (c *Cx1Client) SetProjectLanguageModeByID(projectID, languageMode string, allowOverride bool) error {
+func (c Cx1Client) SetProjectLanguageModeByID(projectID, languageMode string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.config.sast.languageMode"
 	setting.Value = languageMode
 	setting.AllowOverride = allowOverride
 
-	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
 }
 
-func (c *Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride bool) error {
+func (c Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride bool) error {
 	c.depwarn("SetProjectFileFilter", "SetProjectFileFilterByID")
 	return c.SetProjectFileFilterByID(projectID, filter, allowOverride)
 }
 
-func (c *Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverride bool) error {
+func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverride bool) error {
 	var setting ProjectConfigurationSetting
 	setting.Key = "scan.config.sast.filter"
 	setting.Value = filter
@@ -308,16 +315,16 @@ func (c *Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOver
 
 	// TODO - apply the filter across all languages? set up separate calls per engine? engine as param?
 
-	return c.UpdateProjectConfiguration(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
 }
 
 // GetScans returns all scan status on the project addressed by projectID
-func (c *Cx1Client) GetLastScans(projectID string, limit int) ([]Scan, error) {
+func (c Cx1Client) GetLastScans(projectID string, limit int) ([]Scan, error) {
 	c.depwarn("GetLastScans", "GetLastScansByID")
 	return c.GetLastScansByID(projectID, limit)
 }
 
-func (c *Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error) {
+func (c Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error) {
 	var scanResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64
@@ -342,11 +349,11 @@ func (c *Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error
 }
 
 // GetScans returns all scan status on the project addressed by projectID
-func (c *Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string) ([]Scan, error) {
+func (c Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string) ([]Scan, error) {
 	c.depwarn("GetLastScansByStatus", "GetLastScansByStatusAndID")
 	return c.GetLastScansByStatusAndID(projectID, limit, status)
 }
-func (c *Cx1Client) GetLastScansByStatusAndID(projectID string, limit int, status []string) ([]Scan, error) {
+func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit int, status []string) ([]Scan, error) {
 	var scanResponse struct {
 		TotalCount         uint64
 		FilteredTotalCount uint64
@@ -373,7 +380,7 @@ func (c *Cx1Client) GetLastScansByStatusAndID(projectID string, limit int, statu
 }
 
 // convenience
-func (c *Cx1Client) GetProjectCount() (uint64, error) {
+func (c Cx1Client) GetProjectCount() (uint64, error) {
 	c.logger.Debug("Get Cx1 Projects")
 	var ProjectResponse struct {
 		TotalCount         uint64
@@ -396,7 +403,7 @@ func (c *Cx1Client) GetProjectCount() (uint64, error) {
 	return ProjectResponse.TotalCount, err
 }
 
-func (c *Cx1Client) GetProjectCountByName(name string) (uint64, error) {
+func (c Cx1Client) GetProjectCountByName(name string) (uint64, error) {
 	c.logger.Debug("Get Cx1 Projects")
 	var ProjectResponse struct {
 		TotalCount         uint64
@@ -419,11 +426,11 @@ func (c *Cx1Client) GetProjectCountByName(name string) (uint64, error) {
 	return ProjectResponse.FilteredTotalCount, err
 }
 
-func (c *Cx1Client) ProjectLink(p *Project) string {
+func (c Cx1Client) ProjectLink(p *Project) string {
 	return fmt.Sprintf("%v/projects/%v/overview", c.baseUrl, p.ProjectID)
 }
 
-func (c *Cx1Client) UpdateProject(project *Project) error {
+func (c Cx1Client) UpdateProject(project *Project) error {
 	c.logger.Debugf("Updating project %v", project.String())
 
 	jsonBody, err := json.Marshal(project)
@@ -435,7 +442,7 @@ func (c *Cx1Client) UpdateProject(project *Project) error {
 	return err
 }
 
-func (c *Cx1Client) DeleteProject(p *Project) error {
+func (c Cx1Client) DeleteProject(p *Project) error {
 	c.logger.Debugf("Deleting Project %v", p.String())
 
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/projects/%v", p.ProjectID), nil, nil)
@@ -453,16 +460,25 @@ func (p *Project) AssignGroup(group *Group) {
 	p.Groups = append(p.Groups, group.GroupID)
 }
 
-func (c *Cx1Client) GetOrCreateProject(name string) (Project, error) {
+func (c Cx1Client) GetOrCreateProject(name string) (Project, error) {
 	c.depwarn("GetOrCreateProject", "GetOrCreateProjectByName")
 	return c.GetOrCreateProjectByName(name)
 }
 
-func (c *Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {
+func (c Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {
 	project, err := c.GetProjectByName(name)
 	if err == nil {
 		return project, nil
 	}
 
 	return c.CreateProject(name, []string{}, map[string]string{})
+}
+
+func (p Project) GetConfigurationByName(configKey string) *ProjectConfigurationSetting {
+	for id := range p.Configuration {
+		if p.Configuration[id].Key == configKey {
+			return &(p.Configuration[id])
+		}
+	}
+	return nil
 }
