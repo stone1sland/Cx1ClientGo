@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func (c *Cx1Client) GetQueryByID(qid uint64) (Query, error) {
+func (c Cx1Client) GetQueryByID(qid uint64) (Query, error) {
 	var q Query
 	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/queries/%d", qid), nil, nil)
@@ -21,7 +21,7 @@ func (c *Cx1Client) GetQueryByID(qid uint64) (Query, error) {
 	return q, err
 }
 
-func (c *Cx1Client) GetQueries() (QueryCollection, error) {
+func (c Cx1Client) GetQueries() (QueryCollection, error) {
 	c.logger.Debug("Get Cx1 Queries Collection")
 	var qc QueryCollection
 
@@ -116,14 +116,14 @@ func (q *QueryLanguage) String() string {
 	return q.Name
 }
 
-func (c *Cx1Client) QueryLink(q *Query) string {
+func (c Cx1Client) QueryLink(q *Query) string {
 	return fmt.Sprintf("%v/audit/?queryid=%d", c.baseUrl, q.QueryID)
 }
 
-func (c *Cx1Client) QueryGroupLink(q *QueryGroup) string {
+func (c Cx1Client) QueryGroupLink(q *QueryGroup) string {
 	return fmt.Sprintf("%v/audit/?language=%v&group=%v", c.baseUrl, q.Language, q.Name)
 }
 
-func (c *Cx1Client) QueryLanguageLink(q *QueryLanguage) string {
+func (c Cx1Client) QueryLanguageLink(q *QueryLanguage) string {
 	return fmt.Sprintf("%v/audit/?language=%v", c.baseUrl, q.Name)
 }

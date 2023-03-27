@@ -14,7 +14,7 @@ func (p *Preset) String() string {
 	return fmt.Sprintf("[%d] %v", p.PresetID, p.Name)
 }
 
-func (c *Cx1Client) GetPresets() ([]Preset, error) {
+func (c Cx1Client) GetPresets() ([]Preset, error) {
 	c.logger.Debug("Get Cx1 Presets")
 	var presets []Preset
 	response, err := c.sendRequest(http.MethodGet, "/queries/presets", nil, nil)
@@ -27,7 +27,7 @@ func (c *Cx1Client) GetPresets() ([]Preset, error) {
 	return presets, err
 }
 
-func (c *Cx1Client) GetPresetByName(name string) (Preset, error) {
+func (c Cx1Client) GetPresetByName(name string) (Preset, error) {
 	c.logger.Debugf("Get preset by name %v", name)
 	var preset Preset
 	var presets []Preset
@@ -44,7 +44,7 @@ func (c *Cx1Client) GetPresetByName(name string) (Preset, error) {
 	return preset, fmt.Errorf("no such preset %v found", name)
 }
 
-func (c *Cx1Client) GetPresetByID(id uint64) (Preset, error) {
+func (c Cx1Client) GetPresetByID(id uint64) (Preset, error) {
 	c.logger.Debugf("Get preset by id %d", id)
 	var temp_preset struct {
 		Preset
@@ -71,7 +71,7 @@ func (c *Cx1Client) GetPresetByID(id uint64) (Preset, error) {
 	return preset, err
 }
 
-func (c *Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
+func (c Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
 	c.logger.Tracef("Fetching contents for preset %v", p.PresetID)
 	if !p.Filled {
 		preset, err := c.GetPresetByID(p.PresetID)
@@ -103,7 +103,7 @@ func (c *Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
 	return nil
 }
 
-func (c *Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Preset, error) {
+func (c Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Preset, error) {
 	c.logger.Debugf("Creating preset %v", name)
 	var preset Preset
 
@@ -150,7 +150,7 @@ func (p *Preset) AddQueryID(queryId uint64) {
 	p.QueryIDs = append(p.QueryIDs, queryId)
 }
 
-func (c *Cx1Client) UpdatePreset(preset *Preset) error {
+func (c Cx1Client) UpdatePreset(preset *Preset) error {
 	c.logger.Debugf("Saving preset %v", preset.Name)
 
 	qidstr := make([]string, len(preset.QueryIDs))
@@ -180,12 +180,12 @@ func (c *Cx1Client) UpdatePreset(preset *Preset) error {
 	return err
 }
 
-func (c *Cx1Client) DeletePreset(preset *Preset) error {
+func (c Cx1Client) DeletePreset(preset *Preset) error {
 	c.logger.Debugf("Removing preset %v", preset.Name)
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/presets/%d", preset.PresetID), nil, nil)
 	return err
 }
 
-func (c *Cx1Client) PresetLink(p *Preset) string {
+func (c Cx1Client) PresetLink(p *Preset) string {
 	return fmt.Sprintf("%v/resourceManagement/presets?presetId=%d", c.baseUrl, p.PresetID)
 }

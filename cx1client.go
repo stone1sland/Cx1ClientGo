@@ -84,7 +84,7 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 	return &cli, nil
 }
 
-func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
+func (c Cx1Client) createRequest(method, url string, body io.Reader, header *http.Header, cookies []*http.Cookie) (*http.Request, error) {
 	request, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return &http.Request{}, err
@@ -108,7 +108,7 @@ func (c *Cx1Client) createRequest(method, url string, body io.Reader, header *ht
 	return request, nil
 }
 
-func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
+func (c Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
 	/*var requestBody io.Reader
 	var bodyBytes []byte
 
@@ -156,7 +156,7 @@ func (c *Cx1Client) sendRequestInternal(method, url string, body io.Reader, head
 	return resBody, err
 }
 
-func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
+func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
 	var requestBody io.Reader
 	var bodyBytes []byte
 
@@ -222,33 +222,33 @@ func (c *Cx1Client) sendRequestRaw(method, url string, body io.Reader, header ht
 	return response, nil
 }
 
-func (c *Cx1Client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
+func (c Cx1Client) sendRequest(method, url string, body io.Reader, header http.Header) ([]byte, error) {
 	cx1url := fmt.Sprintf("%v/api%v", c.baseUrl, url)
 	return c.sendRequestInternal(method, cx1url, body, header)
 }
 
-func (c *Cx1Client) sendRequestRawCx1(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
+func (c Cx1Client) sendRequestRawCx1(method, url string, body io.Reader, header http.Header) (*http.Response, error) {
 	cx1url := fmt.Sprintf("%v/api%v", c.baseUrl, url)
 	return c.sendRequestRaw(method, cx1url, body, header)
 }
 
-func (c *Cx1Client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
+func (c Cx1Client) sendRequestIAM(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
 	iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
 	return c.sendRequestInternal(method, iamurl, body, header)
 }
 
-func (c *Cx1Client) sendRequestRawIAM(method, base, url string, body io.Reader, header http.Header) (*http.Response, error) {
+func (c Cx1Client) sendRequestRawIAM(method, base, url string, body io.Reader, header http.Header) (*http.Response, error) {
 	iamurl := fmt.Sprintf("%v%v/realms/%v%v", c.iamUrl, base, c.tenant, url)
 	return c.sendRequestRaw(method, iamurl, body, header)
 }
 
 // not sure what to call this one? used for /console/ calls, not part of the /realms/ path
-func (c *Cx1Client) sendRequestOther(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
+func (c Cx1Client) sendRequestOther(method, base, url string, body io.Reader, header http.Header) ([]byte, error) {
 	iamurl := fmt.Sprintf("%v%v/%v%v", c.iamUrl, base, c.tenant, url)
 	return c.sendRequestInternal(method, iamurl, body, header)
 }
 
-func (c *Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte) {
+func (c Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseBody []byte) {
 	if len(requestBody) != 0 {
 		c.logger.Tracef("Request body: %s", string(requestBody))
 	}
@@ -257,7 +257,7 @@ func (c *Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, response
 	}
 }
 
-func (c *Cx1Client) String() string {
+func (c Cx1Client) String() string {
 	return fmt.Sprintf("%v on %v ", c.tenant, c.baseUrl)
 }
 
@@ -268,7 +268,7 @@ func ShortenGUID(guid string) string {
 	return fmt.Sprintf("%v..%v", guid[:2], guid[len(guid)-2:])
 }
 
-func (c *Cx1Client) depwarn(old, new string) {
+func (c Cx1Client) depwarn(old, new string) {
 	if new == "" {
 		c.logger.Warnf("Cx1ClientGo deprecation notice: %v will be deprecated", old)
 	} else {

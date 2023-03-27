@@ -7,7 +7,7 @@ import (
 )
 
 // Roles and Clients
-func (c *Cx1Client) GetClients() ([]KeyCloakClient, error) {
+func (c Cx1Client) GetClients() ([]KeyCloakClient, error) {
 	c.logger.Debug("Getting KeyCloak Clients")
 	var clients []KeyCloakClient
 
@@ -21,7 +21,7 @@ func (c *Cx1Client) GetClients() ([]KeyCloakClient, error) {
 	return clients, err
 }
 
-func (c *Cx1Client) GetClientByName(clientName string) (KeyCloakClient, error) {
+func (c Cx1Client) GetClientByName(clientName string) (KeyCloakClient, error) {
 	c.logger.Debugf("Getting KeyCloak client with name %v", clientName)
 
 	var client KeyCloakClient
@@ -40,7 +40,7 @@ func (c *Cx1Client) GetClientByName(clientName string) (KeyCloakClient, error) {
 	return client, fmt.Errorf("no such client %v found", clientName)
 }
 
-func (c *Cx1Client) GetTenantID() string {
+func (c Cx1Client) GetTenantID() string {
 	if tenantID != "" {
 		return tenantID
 	}
@@ -76,7 +76,7 @@ func (c *Cx1Client) GetTenantID() string {
 }
 
 // convenience function
-func (c *Cx1Client) GetASTAppID() string {
+func (c Cx1Client) GetASTAppID() string {
 	if astAppID == "" {
 		client, err := c.GetClientByName("ast-app")
 		if err != nil {
