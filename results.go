@@ -8,11 +8,11 @@ import (
 	"net/url"
 )
 
-func (c *Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, error) {
+func (c Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, error) {
 	c.depwarn("GetScanResults", "GetScanResultsByID")
 	return c.GetScanResultsByID(scanID, limit)
 }
-func (c *Cx1Client) GetScanResultsByID(scanID string, limit uint64) ([]ScanResult, error) {
+func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) ([]ScanResult, error) {
 	c.logger.Debug("Get Cx1 Scan Results")
 	var resultResponse struct {
 		Results    []ScanResult
@@ -49,12 +49,12 @@ func (c *Cx1Client) GetScanResultsByID(scanID string, limit uint64) ([]ScanResul
 	return resultResponse.Results, nil
 }
 
-func (c *Cx1Client) GetScanResultsCount(scanID string) (uint64, error) {
+func (c Cx1Client) GetScanResultsCount(scanID string) (uint64, error) {
 	c.depwarn("GetScanResultsCount", "GetScanResultsCountByID")
 	return c.GetScanResultsCountByID(scanID)
 }
 
-func (c *Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
+func (c Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
 	c.logger.Debug("Get Cx1 Scan Results")
 	var resultResponse struct {
 		//Results    []ScanResult
@@ -85,7 +85,7 @@ func (c *Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
 }
 
 // results
-func (c *Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
+func (c Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
 	c.logger.Debugf("Adding %d results predicates", len(predicates))
 
 	jsonBody, err := json.Marshal(predicates)
@@ -98,12 +98,12 @@ func (c *Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
 	return err
 }
 
-func (c *Cx1Client) GetResultsPredicates(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
+func (c Cx1Client) GetResultsPredicates(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
 	c.depwarn("GetResultsPredicates", "GetResultsPredicatesByID")
 	return c.GetResultsPredicatesByID(SimilarityID, ProjectID)
 }
 
-func (c *Cx1Client) GetResultsPredicatesByID(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
+func (c Cx1Client) GetResultsPredicatesByID(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
 	c.logger.Debugf("Fetching results predicates for project %v similarityId %d", ProjectID, SimilarityID)
 
 	var Predicates struct {
@@ -154,7 +154,7 @@ func addResultStatus(summary *ScanResultStatusSummary, result *ScanResult) {
 	}
 }
 
-func (c *Cx1Client) GetScanResultSummary(results []ScanResult) ScanResultSummary {
+func (c Cx1Client) GetScanResultSummary(results []ScanResult) ScanResultSummary {
 	summary := ScanResultSummary{}
 
 	for _, result := range results {

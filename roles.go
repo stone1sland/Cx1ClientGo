@@ -31,12 +31,12 @@ func (r *Role) HasRole(name string) bool {
 	return false
 }
 
-func (c *Cx1Client) GetKeyCloakRoles() ([]Role, error) {
+func (c Cx1Client) GetKeyCloakRoles() ([]Role, error) {
 	c.depwarn("*KeyCloakRoles*", "*IAMRoles*")
 	return c.GetIAMRoles()
 }
 
-func (c *Cx1Client) GetIAMRoles() ([]Role, error) {
+func (c Cx1Client) GetIAMRoles() ([]Role, error) {
 	c.logger.Debugf("Getting KeyCloak Roles")
 	var roles []Role
 
@@ -50,11 +50,11 @@ func (c *Cx1Client) GetIAMRoles() ([]Role, error) {
 	return roles, err
 }
 
-func (c *Cx1Client) GetKeyCloakRoleByName(name string) (Role, error) {
+func (c Cx1Client) GetKeyCloakRoleByName(name string) (Role, error) {
 	c.depwarn("*KeyCloakRoles*", "*IAMRoles*")
 	return c.GetIAMRoleByName(name)
 }
-func (c *Cx1Client) GetIAMRoleByName(name string) (Role, error) {
+func (c Cx1Client) GetIAMRoleByName(name string) (Role, error) {
 	c.logger.Debugf("Getting KeyCloak Role named %v", name)
 	var role Role
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/roles/%v", url.QueryEscape(name)), nil, nil)
@@ -66,12 +66,12 @@ func (c *Cx1Client) GetIAMRoleByName(name string) (Role, error) {
 	return role, err
 }
 
-func (c *Cx1Client) GetRolesByClient(clientId string) ([]Role, error) {
+func (c Cx1Client) GetRolesByClient(clientId string) ([]Role, error) {
 	c.depwarn("GetRolesByClient", "GetRolesByClientID")
 	return c.GetRolesByClientID(clientId)
 }
 
-func (c *Cx1Client) GetRolesByClientID(clientId string) ([]Role, error) {
+func (c Cx1Client) GetRolesByClientID(clientId string) ([]Role, error) {
 	c.logger.Debugf("Getting roles for client %v", clientId)
 	var roles []Role
 
@@ -85,12 +85,12 @@ func (c *Cx1Client) GetRolesByClientID(clientId string) ([]Role, error) {
 	return roles, err
 }
 
-func (c *Cx1Client) GetRoleByClientAndName(clientId string, name string) (Role, error) {
+func (c Cx1Client) GetRoleByClientAndName(clientId string, name string) (Role, error) {
 	c.depwarn("GetRoleByClientAndName", "GetRoleByClientIDAndName")
 	return c.GetRoleByClientIDAndName(clientId, name)
 }
 
-func (c *Cx1Client) GetRoleByClientIDAndName(clientId string, name string) (Role, error) {
+func (c Cx1Client) GetRoleByClientIDAndName(clientId string, name string) (Role, error) {
 	c.logger.Debugf("Getting KeyCloak Roles for client %v with name %v", clientId, name)
 	var role Role
 
@@ -103,7 +103,7 @@ func (c *Cx1Client) GetRoleByClientIDAndName(clientId string, name string) (Role
 	return role, err
 }
 
-func (c *Cx1Client) GetRoleComposites(role *Role) ([]Role, error) {
+func (c Cx1Client) GetRoleComposites(role *Role) ([]Role, error) {
 	var roles []Role
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/roles-by-id/%v/composites", role.RoleID), nil, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func (c *Cx1Client) GetRoleComposites(role *Role) ([]Role, error) {
 	return roles, err
 }
 
-func (c *Cx1Client) AddRoleComposites(role *Role, roles *[]Role) error {
+func (c Cx1Client) AddRoleComposites(role *Role, roles *[]Role) error {
 	if len(*roles) == 0 {
 		return fmt.Errorf("no role IDs provided")
 	}
@@ -136,7 +136,7 @@ func (c *Cx1Client) AddRoleComposites(role *Role, roles *[]Role) error {
 	return nil
 }
 
-func (c *Cx1Client) RemoveRoleComposites(role *Role, roles *[]Role) error {
+func (c Cx1Client) RemoveRoleComposites(role *Role, roles *[]Role) error {
 	if len(*roles) == 0 {
 		return fmt.Errorf("no role IDs provided")
 	}
@@ -157,12 +157,12 @@ func (c *Cx1Client) RemoveRoleComposites(role *Role, roles *[]Role) error {
 	return nil
 }
 
-func (c *Cx1Client) CreateASTRole(roleName, createdBy string) (Role, error) {
+func (c Cx1Client) CreateASTRole(roleName, createdBy string) (Role, error) {
 	c.depwarn("CreateASTRole", "CreateAppRole")
 	return c.CreateAppRole(roleName, createdBy)
 }
 
-func (c *Cx1Client) CreateAppRole(roleName, createdBy string) (Role, error) {
+func (c Cx1Client) CreateAppRole(roleName, createdBy string) (Role, error) {
 	c.logger.Debugf("User %v creating client role %v", createdBy, roleName)
 	data := map[string]interface{}{
 		"name":       roleName,
@@ -189,7 +189,7 @@ func (c *Cx1Client) CreateAppRole(roleName, createdBy string) (Role, error) {
 	return c.GetRoleByClientIDAndName(c.GetASTAppID(), roleName)
 }
 
-func (c *Cx1Client) GetRoleByID(roleId string) (Role, error) {
+func (c Cx1Client) GetRoleByID(roleId string) (Role, error) {
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/roles-by-id/%v", roleId), nil, nil)
 	var role Role
 	if err != nil {
@@ -200,38 +200,38 @@ func (c *Cx1Client) GetRoleByID(roleId string) (Role, error) {
 	return role, err
 }
 
-func (c *Cx1Client) DeleteRoleByID(roleId string) error {
+func (c Cx1Client) DeleteRoleByID(roleId string) error {
 	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/roles-by-id/%v", roleId), nil, nil)
 	return err
 }
 
-func (c *Cx1Client) GetASTRoles() ([]Role, error) {
+func (c Cx1Client) GetASTRoles() ([]Role, error) {
 	c.depwarn("GetASTRoles", "GetAppRoles")
 	return c.GetAppRoles()
 }
 
-func (c *Cx1Client) GetAppRoles() ([]Role, error) {
+func (c Cx1Client) GetAppRoles() ([]Role, error) {
 	c.logger.Debug("Getting roles set for ast-app client")
 	return c.GetRolesByClient(c.GetASTAppID())
 }
 
-func (c *Cx1Client) GetAppRoleByName(name string) (Role, error) {
+func (c Cx1Client) GetAppRoleByName(name string) (Role, error) {
 	c.logger.Debugf("Getting role named %v in ast-app client", name)
 	return c.GetRoleByClientIDAndName(c.GetASTAppID(), name)
 }
-func (c *Cx1Client) GetASTRoleByName(name string) (Role, error) {
+func (c Cx1Client) GetASTRoleByName(name string) (Role, error) {
 	c.depwarn("GetASTRoleByName", "GetAppRoleByName")
 	c.logger.Debugf("Getting role named %v in ast-app client", name)
 	return c.GetRoleByClientIDAndName(c.GetASTAppID(), name)
 }
 
 // convenience function to get both KeyCloak (system) roles plus the AST-APP-specific roles
-func (c *Cx1Client) GetCombinedRoles() ([]Role, error) {
+func (c Cx1Client) GetCombinedRoles() ([]Role, error) {
 	c.depwarn("GetCombinedRoles*", "GetRoles*")
 	return c.GetRoles()
 }
 
-func (c *Cx1Client) GetRoles() ([]Role, error) {
+func (c Cx1Client) GetRoles() ([]Role, error) {
 	c.logger.Debug("Getting all available roles")
 	ast_roles, err := c.GetAppRoles()
 	if err != nil {
@@ -246,12 +246,12 @@ func (c *Cx1Client) GetRoles() ([]Role, error) {
 	return ast_roles, nil
 }
 
-func (c *Cx1Client) GetCombinedRoleByName(name string) (Role, error) {
+func (c Cx1Client) GetCombinedRoleByName(name string) (Role, error) {
 	c.depwarn("GetCombinedRoleByName", "GetRoleByName")
 	return c.GetRoleByName(name)
 }
 
-func (c *Cx1Client) GetRoleByName(name string) (Role, error) {
+func (c Cx1Client) GetRoleByName(name string) (Role, error) {
 	c.logger.Debug("Getting any role named: %v", name)
 
 	role, err := c.GetAppRoleByName(name)
@@ -266,6 +266,6 @@ func (c *Cx1Client) GetRoleByName(name string) (Role, error) {
 	return Role{}, fmt.Errorf("Role %v not found", name)
 }
 
-func (c *Cx1Client) RoleLink(r *Role) string {
+func (c Cx1Client) RoleLink(r *Role) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/roles/%v", c.iamUrl, c.tenant, c.tenant, r.RoleID)
 }

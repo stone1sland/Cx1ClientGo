@@ -11,12 +11,12 @@ import (
 	"time"
 )
 
-func (c *Cx1Client) GetScan(scanID string) (Scan, error) {
+func (c Cx1Client) GetScan(scanID string) (Scan, error) {
 	c.depwarn("GetScan", "GetScanByID")
 	return c.GetScanByID(scanID)
 }
 
-func (c *Cx1Client) GetScanByID(scanID string) (Scan, error) {
+func (c Cx1Client) GetScanByID(scanID string) (Scan, error) {
 	var scan Scan
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans/%v", scanID), nil, nil)
@@ -29,12 +29,12 @@ func (c *Cx1Client) GetScanByID(scanID string) (Scan, error) {
 	return scan, nil
 }
 
-func (c *Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
+func (c Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
 	c.depwarn("GetScanMetadata", "GetScanMetadataByID")
 	return c.GetScanMetadataByID(scanID)
 }
 
-func (c *Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
+func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 	var scanmeta ScanMetadata
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-metadata/%v", scanID), nil, http.Header{})
@@ -58,12 +58,12 @@ func (s *ScanSummary) TotalCount() uint64 {
 	return count
 }
 
-func (c *Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
+func (c Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
 	c.depwarn("GetScanSummary", "GetScanSummaryByID")
 	return c.GetScanSummaryByID(scanID)
 }
 
-func (c *Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
+func (c Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
 	var ScansSummaries struct {
 		ScanSum    []ScanSummary `json:"scansSummaries"`
 		TotalCount uint64
@@ -99,11 +99,11 @@ func (c *Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
 	return ScansSummaries.ScanSum[0], nil
 }
 
-func (c *Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {
+func (c Cx1Client) GetScanLogs(scanID, engine string) ([]byte, error) {
 	c.depwarn("GetScanLogs", "GetScanLogsByID")
 	return c.GetScanLogsByID(scanID, engine)
 }
-func (c *Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
+func (c Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
 	c.logger.Debugf("Fetching scan logs for scan %v", scanID)
 
 	response, err := c.sendRequestRawCx1(http.MethodGet, fmt.Sprintf("/logs/%v/%v", scanID, engine), nil, nil)
@@ -128,7 +128,7 @@ func (c *Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
 	return data, nil
 }
 
-func (c *Cx1Client) scanProject(scanConfig map[string]interface{}) (Scan, error) {
+func (c Cx1Client) scanProject(scanConfig map[string]interface{}) (Scan, error) {
 	scan := Scan{}
 
 	jsonBody, err := json.Marshal(scanConfig)
@@ -145,12 +145,12 @@ func (c *Cx1Client) scanProject(scanConfig map[string]interface{}) (Scan, error)
 	return scan, err
 }
 
-func (c *Cx1Client) ScanProjectZip(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+func (c Cx1Client) ScanProjectZip(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	c.depwarn("ScanProjectZip", "ScanProjectZipByID")
 	return c.ScanProjectZipByID(projectID, sourceUrl, branch, settings, tags)
 }
 
-func (c *Cx1Client) ScanProjectZipByID(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+func (c Cx1Client) ScanProjectZipByID(projectID, sourceUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	jsonBody := map[string]interface{}{
 		"project": map[string]interface{}{"id": projectID},
 		"type":    "upload",
@@ -169,12 +169,12 @@ func (c *Cx1Client) ScanProjectZipByID(projectID, sourceUrl, branch string, sett
 	return scan, err
 }
 
-func (c *Cx1Client) ScanProjectGit(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+func (c Cx1Client) ScanProjectGit(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	c.depwarn("ScanProjectGit", "ScanProjectGitByID")
 	return c.ScanProjectGitByID(projectID, repoUrl, branch, settings, tags)
 }
 
-func (c *Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+func (c Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	jsonBody := map[string]interface{}{
 		"project": map[string]interface{}{"id": projectID},
 		"type":    "git",
@@ -194,16 +194,16 @@ func (c *Cx1Client) ScanProjectGitByID(projectID, repoUrl, branch string, settin
 }
 
 // convenience function
-func (c *Cx1Client) ScanProject(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+func (c Cx1Client) ScanProject(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	c.depwarn("ScanProject", "ScanProjectByID")
 	return c.ScanProjectByID(projectID, sourceUrl, branch, scanType, settings, tags)
 }
 
-func (c *Cx1Client) ScanProjectByID(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
+func (c Cx1Client) ScanProjectByID(projectID, sourceUrl, branch, scanType string, settings []ScanConfiguration, tags map[string]string) (Scan, error) {
 	if scanType == "upload" {
-		return c.ScanProjectZip(projectID, sourceUrl, branch, settings, tags)
+		return c.ScanProjectZipByID(projectID, sourceUrl, branch, settings, tags)
 	} else if scanType == "git" {
-		return c.ScanProjectGit(projectID, sourceUrl, branch, settings, tags)
+		return c.ScanProjectGitByID(projectID, sourceUrl, branch, settings, tags)
 	}
 
 	return Scan{}, fmt.Errorf("invalid scanType provided, must be 'upload' or 'git'")
@@ -222,7 +222,7 @@ func (s *Scan) IsIncremental() (bool, error) {
 }
 
 // convenience
-func (c *Cx1Client) ScanPolling(s *Scan) (Scan, error) {
+func (c Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 	c.logger.Infof("Polling status of scan %v", s.ScanID)
 	var err error
 	scan := *s
@@ -241,7 +241,7 @@ func (c *Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 	return scan, nil
 }
 
-func (c *Cx1Client) GetUploadURL() (string, error) {
+func (c Cx1Client) GetUploadURL() (string, error) {
 	c.logger.Debug("Get Cx1 Upload URL")
 	response, err := c.sendRequest(http.MethodPost, "/uploads", nil, nil)
 
@@ -262,7 +262,7 @@ func (c *Cx1Client) GetUploadURL() (string, error) {
 	}
 }
 
-func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
+func (c Cx1Client) PutFile(URL string, filename string) (string, error) {
 	c.logger.Tracef("Putting file %v to %v", filename, URL)
 
 	fileContents, err := os.ReadFile(filename)
@@ -295,6 +295,37 @@ func (c *Cx1Client) PutFile(URL string, filename string) (string, error) {
 	}
 
 	return string(resBody), nil
+}
+
+func (c Cx1Client) UploadBytesForProjectByID(projectID string, fileContents *[]byte) (string, error) {
+	// this function exists only for compatibility with a generic interface supporting both SAST and Cx1
+	return c.UploadBytes(fileContents)
+}
+
+// creates upload URL, uploads, returns upload URL
+func (c Cx1Client) UploadBytes(fileContents *[]byte) (string, error) {
+	uploadUrl, err := c.GetUploadURL()
+	if err != nil {
+		return "", err
+	}
+
+	header := http.Header{}
+	header.Add("Content-Type", "application/zip")
+
+	cx1_req, err := c.createRequest(http.MethodPut, uploadUrl, bytes.NewReader(*fileContents), &header, nil)
+	if err != nil {
+		return "", err
+	}
+	cx1_req.ContentLength = int64(len(*fileContents))
+
+	res, err := c.httpClient.Do(cx1_req)
+	if err != nil {
+		c.logger.Tracef("Error: %s", err)
+		return "", err
+	}
+	defer res.Body.Close()
+
+	return uploadUrl, nil
 }
 
 func (s *Scan) String() string {
