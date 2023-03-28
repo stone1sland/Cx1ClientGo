@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -14,34 +15,75 @@ func (p *Preset) String() string {
 	return fmt.Sprintf("[%d] %v", p.PresetID, p.Name)
 }
 
-func (c Cx1Client) GetPresets() ([]Preset, error) {
+func (c Cx1Client) GetPresets(count uint64) ([]Preset, error) {
 	c.logger.Debug("Get Cx1 Presets")
-	var presets []Preset
-	response, err := c.sendRequest(http.MethodGet, "/queries/presets", nil, nil)
-	if err != nil {
-		return presets, err
+	var preset_response struct {
+		TotalCount uint64   `json:"totalCount"`
+		Presets    []Preset `json:"presets"`
 	}
 
-	err = json.Unmarshal(response, &presets)
-	c.logger.Tracef("Got %d presets", len(presets))
-	return presets, err
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets?limit=%d", count), nil, nil)
+	if err != nil {
+		return preset_response.Presets, err
+	}
+
+	err = json.Unmarshal(response, &preset_response)
+	c.logger.Tracef("Got %d presets", len(preset_response.Presets))
+	return preset_response.Presets, err
+}
+
+func (c Cx1Client) GetPresetCount() (uint64, error) {
+	c.logger.Debug("Get Cx1 Presets count")
+
+	response, err := c.sendRequest(http.MethodGet, "/presets?limit=1", nil, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	var preset_response struct {
+		TotalCount uint64 `json:"totalCount"`
+	}
+
+	err = json.Unmarshal(response, &preset_response)
+	if err != nil {
+		c.logger.Tracef("Failed to unmarshal response: %s", err)
+		c.logger.Tracef("Response was: %v", string(response))
+
+	}
+
+	return preset_response.TotalCount, err
 }
 
 func (c Cx1Client) GetPresetByName(name string) (Preset, error) {
 	c.logger.Debugf("Get preset by name %v", name)
-	var preset Preset
-	var presets []Preset
-	presets, err := c.GetPresets()
-	if err != nil {
-		return preset, err
+	// https://deu.ast.checkmarx.net/api/presets?offset=0&limit=20&include_details=false&name=b&exact_match=false
+	var preset_response struct {
+		TotalCount uint64   `json:"totalCount"`
+		Presets    []Preset `json:"presets"`
 	}
 
-	for _, p := range presets {
-		if p.Name == name {
-			return p, nil
-		}
+	params := url.Values{
+		"offset":          {"0"},
+		"limit":           {"1"},
+		"exact_match":     {"true"},
+		"include_details": {"false"},
+		"name":            {name},
 	}
-	return preset, fmt.Errorf("no such preset %v found", name)
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/presets?%v", params.Encode()), nil, nil)
+	if err != nil {
+		return Preset{}, err
+	}
+
+	err = json.Unmarshal(response, &preset_response)
+
+	if err != nil {
+		return Preset{}, err
+	}
+	if len(preset_response.Presets) == 0 {
+		return Preset{}, fmt.Errorf("no such preset %v found", name)
+	}
+	return preset_response.Presets[0], nil
 }
 
 func (c Cx1Client) GetPresetByID(id uint64) (Preset, error) {
@@ -101,6 +143,16 @@ func (c Cx1Client) GetPresetContents(p *Preset, qc *QueryCollection) error {
 	}
 
 	return nil
+}
+
+// convenience
+func (c Cx1Client) GetAllPresets() ([]Preset, error) {
+	count, err := c.GetPresetCount()
+	if err != nil {
+		return []Preset{}, err
+	}
+
+	return c.GetPresets(count)
 }
 
 func (c Cx1Client) CreatePreset(name, description string, queryIDs []uint64) (Preset, error) {
