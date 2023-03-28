@@ -80,7 +80,7 @@ func (c *Cx1Cache) RefreshPresets(client *Cx1Client) error {
 	var err error
 	if !c.PresetRefresh {
 		c.PresetRefresh = true
-		c.Presets, err = client.GetPresets()
+		c.Presets, err = client.GetAllPresets()
 
 		if err != nil {
 			client.logger.Tracef("Failed while retrieving presets: %s", err)
