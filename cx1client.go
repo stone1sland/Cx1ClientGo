@@ -260,18 +260,3 @@ func (c Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseB
 func (c Cx1Client) String() string {
 	return fmt.Sprintf("%v on %v ", c.tenant, c.baseUrl)
 }
-
-func ShortenGUID(guid string) string {
-	if len(guid) <= 2 {
-		return ".."
-	}
-	return fmt.Sprintf("%v..%v", guid[:2], guid[len(guid)-2:])
-}
-
-func (c Cx1Client) depwarn(old, new string) {
-	if new == "" {
-		c.logger.Warnf("Cx1ClientGo deprecation notice: %v will be deprecated", old)
-	} else {
-		c.logger.Warnf("Cx1ClientGo deprecation notice: %v will be deprecated and replaced by %v", old, new)
-	}
-}
