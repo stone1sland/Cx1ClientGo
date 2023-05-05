@@ -109,43 +109,6 @@ func (c Cx1Client) createRequest(method, url string, body io.Reader, header *htt
 }
 
 func (c Cx1Client) sendRequestInternal(method, url string, body io.Reader, header http.Header) ([]byte, error) {
-	/*var requestBody io.Reader
-	var bodyBytes []byte
-
-	c.logger.Debugf("Sending request to URL %v", url)
-
-	if body != nil {
-		closer := io.NopCloser(body)
-		bodyBytes, _ := io.ReadAll(closer)
-		requestBody = bytes.NewBuffer(bodyBytes)
-		defer closer.Close()
-	}
-
-	request, err := c.createRequest(method, url, requestBody, &header, nil)
-	if err != nil {
-		c.logger.Tracef("Unable to create request: %s", err)
-		return []byte{}, err
-	}
-
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		var resBody []byte
-		if response != nil && response.Body != nil {
-			resBody, _ = io.ReadAll(response.Body)
-		}
-		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-		c.logger.Tracef("HTTP request failed with error: %s", err)
-		return resBody, err
-	}
-	if response.StatusCode >= 400 {
-		var resBody []byte
-		if response != nil && response.Body != nil {
-			resBody, _ = io.ReadAll(response.Body)
-		}
-		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
-		c.logger.Tracef("HTTP response indicates error: %v", response.Status)
-		return resBody, fmt.Errorf("HTTP Response: " + response.Status)
-	}*/
 	response, err := c.sendRequestRaw(method, url, body, header)
 	var resBody []byte
 	if response != nil && response.Body != nil {
@@ -160,7 +123,7 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 	var requestBody io.Reader
 	var bodyBytes []byte
 
-	c.logger.Debugf("Sending request to URL %v", url)
+	c.logger.Debugf("Sending %v request to URL %v", method, url)
 
 	if body != nil {
 		closer := io.NopCloser(body)

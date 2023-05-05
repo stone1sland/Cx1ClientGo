@@ -32,6 +32,19 @@ type ApplicationRule struct {
 	Value string `json:"value"`
 }
 
+type AuditQuery struct {
+	QueryID            uint64 `json:"Id,string"`
+	Level              string
+	Path               string
+	Modified           string
+	Source             string
+	Cwe                int64
+	Severity           uint
+	IsExecutable       bool
+	CxDescriptionId    int64
+	QueryDescriptionId string
+}
+
 type Group struct {
 	GroupID     string              `json:"id"`
 	Name        string              `json:"name"`
@@ -100,6 +113,12 @@ type QueryLanguage struct {
 
 type QueryCollection struct {
 	QueryLanguages []QueryLanguage
+}
+
+type QueryUpdate struct { // used when saving queries in Cx1
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Source string `json:"source"`
 }
 
 type ReportStatus struct {
