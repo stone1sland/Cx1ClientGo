@@ -43,6 +43,20 @@ type AuditQuery struct {
 	IsExecutable       bool
 	CxDescriptionId    int64
 	QueryDescriptionId string
+
+	Language string `json:"-"`
+	Group    string `json:"-"`
+	Name     string `json:"-"`
+}
+
+type AuditQueryMetadata struct {
+	Cwe                int64
+	CxDescriptionID    int64
+	IsExecutable       bool
+	Modified           string
+	Path               string
+	QueryDescriptionID string
+	Severity           uint
 }
 
 type Group struct {
@@ -90,14 +104,14 @@ type ProjectConfigurationSetting struct {
 }
 
 type Query struct {
-	QueryID            uint64 `json:"queryID,string"`
-	Name               string `json:"queryName"`
-	Group              string
-	Language           string
-	Severity           string
-	CweID              int64
-	QueryDescriptionId int64
-	Custom             bool
+	QueryID            uint64 `json:"Id,string"`
+	Name               string `json:"name"`
+	Group              string `json:"group"`
+	Language           string `json:"lang"`
+	Severity           string `json:"-"`
+	CweID              int64  `json:"-"`
+	QueryDescriptionId int64  `json:"-"`
+	IsExecutable       bool   `json:"-"`
 }
 
 type QueryGroup struct {

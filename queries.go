@@ -40,6 +40,7 @@ func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQu
 	if err != nil {
 		return q, err
 	}
+	q.ParsePath()
 	return q, nil
 }
 
@@ -54,66 +55,6 @@ func (c Cx1Client) DeleteQueryByName(level, language, group, query string) error
 
 	return nil
 }
-
-func (c Cx1Client) GetQueries() (QueryCollection, error) {
-	c.logger.Debug("Get Cx1 Queries Collection")
-	var qc QueryCollection
-
-	// Note: this list includes API Key/service account users from Cx1, remove the /admin/ for regular users only.
-	response, err := c.sendRequest(http.MethodGet, "/presets/queries", nil, nil)
-	if err != nil {
-		return qc, err
-	}
-
-	queries := []Query{}
-
-	err = json.Unmarshal(response, &queries)
-	if err != nil {
-		c.logger.Tracef("Failed to parse %v", string(response))
-	}
-
-	for _, q := range queries {
-		ql := qc.GetQueryLanguageByName(q.Language)
-
-		if ql == nil {
-			qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
-			ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
-		}
-
-		qg := ql.GetQueryGroupByName(q.Group)
-		if qg == nil {
-			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q}})
-		} else {
-			qg.Queries = append(qg.Queries, q)
-		}
-	}
-
-	return qc, err
-}
-
-/*
-	Creating an Audit session:
-		1. Check if a session is available?
-			GET https://deu.ast.checkmarx.net/api/cx-audit/sessions?projectId=0e253255-c25a-453d-8d8f-95f224a09f3f&scanId=74328f1f-94ec-452f-8f1a-047d76f6764e
-			(project last-scan)
-			Response: {"available":true}
-
-		2. Create a session
-			POST https://deu.ast.checkmarx.net/api/cx-audit/sessions
-			{"projectId":"0e253255-c25a-453d-8d8f-95f224a09f3f","scanId":"74328f1f-94ec-452f-8f1a-047d76f6764e","timeout":30,"fromZip":false}
-
-			Response: {"id":"700fa1fd-8e35-47f5-92da-a0df82672835","status":"ALLOCATED","scanId":"74328f1f-94ec-452f-8f1a-047d76f6764e"}
-
-		3. GET SAST engine status for audit session:
-			GET https://deu.ast.checkmarx.net/api/cx-audit/sessions/700fa1fd-8e35-47f5-92da-a0df82672835/sast-status
-			Response: {"ready":false,"message":"the SAST Engine is not ready yet"} until {"ready":true}
-
-
-	Info for "request-status?type=x"
-		0: get languages
-		1: run initial scan
-		2: query compilation
-*/
 
 func (c Cx1Client) AuditCreateSessionByID(projectId, scanId string) (string, error) {
 	c.logger.Debugf("Trying to create audit session for project %v scan %v", projectId, scanId)
@@ -211,7 +152,6 @@ func (c Cx1Client) auditGetEngineStatusByID(auditSessionId string) (bool, error)
 	}
 
 	return false, fmt.Errorf("unknown cx-audit sast status response: %v", engineResponse.Message)
-
 }
 
 func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
@@ -234,26 +174,6 @@ func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
 	return nil
 }
 
-/*
-	Creating queries:
-		1. POST https://deu.ast.checkmarx.net/api/cx-audit/sessions/3afe3b70-a980-464b-a20e-488110784126/queries/compile
-		[{"Id":"7869536416946871977","name":"Cheeseburgers","group":"JavaScript_Low_Visibility","lang":"JavaScript","path":"queries/JavaScript/JavaScript_Low_Visibility/Cheeseburgers/Cheeseburgers.cs","level":"0e253255-c25a-453d-8d8f-95f224a09f3f","isExecutable":true,
-		"clientUniqId":"JavaScript/Cheeseburgers/Project","originalCode":"","code":"result = base.Cheeseburgers();","fullEditorId":"JavaScript/Cheeseburgers/Project","editorId":"JavaScript/Cheeseburgers","id":"7869536416946871977","source":"result = base.Cheeseburgers();","data":{"Cwe":-1,"CxDescriptionID":-1}}]
-
-		2. Polling GET https://deu.ast.checkmarx.net/api/cx-audit/sessions/3afe3b70-a980-464b-a20e-488110784126/request-status?type=2
-		response: {"completed":false} until {"completed":true,"value":{"success":true}}
-		or
-		{"completed":true,"value":{"failed_queries":[{"errors":[{"column":3,"line":2,"message":"error CS1002: ; expected in "}],"query_id":"15478675597648509034"}]}}
-
-		3. PUT https://deu.ast.checkmarx.net/api/cx-audit/queries/0e253255-c25a-453d-8d8f-95f224a09f3f
-		[{"name":"Cheeseburgers","path":"queries/JavaScript/JavaScript_Low_Visibility/Cheeseburgers/Cheeseburgers.cs","source":"result = base.Cheeseburgers();"}]
-
-		-> err: {"message":"Failed to find query for path 'queries/JavaScript/JavaScript_Low_Visibility/Cheeseburgers/Cheeseburgers.cs'","type":"ERROR","code":708}
-
-		4. Get a project's queries: GET https://deu.ast.checkmarx.net/api/cx-audit/queries?projectId=0e253255-c25a-453d-8d8f-95f224a09f3f
-
-*/
-
 func (c Cx1Client) AuditCheckLanguagesByID(auditSessionId string) error {
 	c.logger.Infof("Triggering language check under audit session %v", auditSessionId)
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/project/languages", auditSessionId), nil, nil)
@@ -274,7 +194,6 @@ func (c Cx1Client) AuditCheckLanguagesByID(auditSessionId string) error {
 	}
 
 	return fmt.Errorf("error: %v", responseStruct.Message)
-
 }
 
 func (c Cx1Client) auditGetLanguagesByID(auditSessionId string) ([]string, error) {
@@ -520,9 +439,8 @@ func (c Cx1Client) AuditCompilePollingByID(auditSessionId string) error {
 	return fmt.Errorf("unknown error")
 }
 
-func (c Cx1Client) AuditCreateQuery(auditSessionId, language, group, query, code string) error {
-	path := fmt.Sprintf("queries/%v/%v/%v/%v.cs", language, group, query, query)
-	folder := fmt.Sprintf("queries/%v/%v/", language, group)
+func (c Cx1Client) SaveQuery(auditSessionId, query AuditQuery) error {
+	folder := fmt.Sprintf("queries/%v/%v/", query.Language, query.Group)
 	var qc struct {
 		Name     string `json:"name"`
 		Path     string `json:"path"`
@@ -531,14 +449,15 @@ func (c Cx1Client) AuditCreateQuery(auditSessionId, language, group, query, code
 			IsExecutable       bool
 			Path               string
 			QueryDescriptionID string
-			Severity           int
+			Severity           uint
 		} `json:"metadata"`
 	}
-	qc.Name = query
-	qc.Source = code
+	qc.Name = query.Name
+	qc.Source = query.Source
 	qc.Path = folder
 	qc.Metadata.IsExecutable = true
-	qc.Metadata.Path = path
+	qc.Metadata.Path = query.Path
+	qc.Metadata.Severity = query.Severity
 
 	jsonBody, _ := json.Marshal(qc)
 
@@ -552,6 +471,9 @@ func (c Cx1Client) AuditCreateQuery(auditSessionId, language, group, query, code
 	}
 	return nil
 }
+
+/*
+// updating queries via PUT is possible, but only allows changing the source code, not metadata around each query.
 
 func (c Cx1Client) UpdateQuery(level, language, group, query, code string) error { // level = projectId or "Corp"
 	path := fmt.Sprintf("queries/%v/%v/%v/%v.cs", language, group, query, query)
@@ -590,9 +512,54 @@ func (c Cx1Client) UpdateQueries(level string, queries []QueryUpdate) error {
 	} else {
 		return nil
 	}
+} */
+
+func (q AuditQuery) String() string {
+	return fmt.Sprintf("[%d] %v: %v", q.QueryID, q.Level, q.Path)
+}
+func (q *AuditQuery) ParsePath() {
+	s := strings.Split(q.Path, "/")
+	q.Language = s[1]
+	q.Group = s[2]
+	q.Name = s[3]
 }
 
-func (qg *QueryGroup) GetQueryByName(name string) *Query {
+func (c Cx1Client) GetQueries() (QueryCollection, error) {
+	c.logger.Debug("Get Cx1 Queries Collection")
+	var qc QueryCollection
+
+	response, err := c.sendRequest(http.MethodGet, "/presets/queries", nil, nil)
+	if err != nil {
+		return qc, err
+	}
+
+	queries := []Query{}
+
+	err = json.Unmarshal(response, &queries)
+	if err != nil {
+		c.logger.Tracef("Failed to parse %v", string(response))
+	}
+
+	for _, q := range queries {
+		ql := qc.GetQueryLanguageByName(q.Language)
+
+		if ql == nil {
+			qc.QueryLanguages = append(qc.QueryLanguages, QueryLanguage{q.Language, []QueryGroup{}})
+			ql = &qc.QueryLanguages[len(qc.QueryLanguages)-1]
+		}
+
+		qg := ql.GetQueryGroupByName(q.Group)
+		if qg == nil {
+			ql.QueryGroups = append(ql.QueryGroups, QueryGroup{q.Group, q.Language, []Query{q}})
+		} else {
+			qg.Queries = append(qg.Queries, q)
+		}
+	}
+
+	return qc, err
+}
+
+func (qg QueryGroup) GetQueryByName(name string) *Query {
 	for id, q := range qg.Queries {
 		if strings.EqualFold(q.Name, name) {
 			return &qg.Queries[id]
@@ -601,7 +568,7 @@ func (qg *QueryGroup) GetQueryByName(name string) *Query {
 	return nil
 }
 
-func (ql *QueryLanguage) GetQueryGroupByName(name string) *QueryGroup {
+func (ql QueryLanguage) GetQueryGroupByName(name string) *QueryGroup {
 	for id, qg := range ql.QueryGroups {
 		if strings.EqualFold(qg.Name, name) {
 			return &ql.QueryGroups[id]
@@ -609,7 +576,7 @@ func (ql *QueryLanguage) GetQueryGroupByName(name string) *QueryGroup {
 	}
 	return nil
 }
-func (qc *QueryCollection) GetQueryLanguageByName(language string) *QueryLanguage {
+func (qc QueryCollection) GetQueryLanguageByName(language string) *QueryLanguage {
 	for id, ql := range qc.QueryLanguages {
 		if strings.EqualFold(ql.Name, language) {
 			return &qc.QueryLanguages[id]
@@ -617,7 +584,7 @@ func (qc *QueryCollection) GetQueryLanguageByName(language string) *QueryLanguag
 	}
 	return nil
 }
-func (qc *QueryCollection) GetQueryByName(language, group, query string) *Query {
+func (qc QueryCollection) GetQueryByName(language, group, query string) *Query {
 	ql := qc.GetQueryLanguageByName(language)
 	if ql == nil {
 		return nil
@@ -629,7 +596,7 @@ func (qc *QueryCollection) GetQueryByName(language, group, query string) *Query 
 	return qg.GetQueryByName(query)
 }
 
-func (qc *QueryCollection) GetQueryByID(qid uint64) *Query {
+func (qc QueryCollection) GetQueryByID(qid uint64) *Query {
 	for _, ql := range qc.QueryLanguages {
 		for _, qg := range ql.QueryGroups {
 			for id, q := range qg.Queries {
@@ -641,13 +608,13 @@ func (qc *QueryCollection) GetQueryByID(qid uint64) *Query {
 	}
 	return nil
 }
-func (q *Query) String() string {
+func (q Query) String() string {
 	return fmt.Sprintf("[%d] %v -> %v -> %v", q.QueryID, q.Language, q.Group, q.Name)
 }
-func (q *QueryGroup) String() string {
+func (q QueryGroup) String() string {
 	return fmt.Sprintf("%v -> %v", q.Language, q.Name)
 }
-func (q *QueryLanguage) String() string {
+func (q QueryLanguage) String() string {
 	return q.Name
 }
 
