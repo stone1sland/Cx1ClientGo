@@ -104,14 +104,14 @@ type ProjectConfigurationSetting struct {
 }
 
 type Query struct {
-	QueryID            uint64 `json:"Id,string"`
-	Name               string `json:"name"`
+	QueryID            uint64 `json:"queryID,string"`
+	Name               string `json:"queryName"`
 	Group              string `json:"group"`
-	Language           string `json:"lang"`
-	Severity           string `json:"-"`
-	CweID              int64  `json:"-"`
-	QueryDescriptionId int64  `json:"-"`
-	IsExecutable       bool   `json:"-"`
+	Language           string `json:"language"`
+	Severity           string `json:"severity"`
+	CweID              int64  `json:"cweID"`
+	QueryDescriptionId int64  `json:"queryDescriptionId"`
+	Custom             bool   `json:"custom"`
 }
 
 type QueryGroup struct {

@@ -140,14 +140,21 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		c.logger.Tracef("Failed HTTP request: %s", err)
-		var resBody []byte
-		if response != nil && response.Body != nil {
-			resBody, _ = io.ReadAll(response.Body)
-		}
-		c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
+		// special handling: some proxies terminate connections resulting in a "remote error: tls: user canceled" failures
+		// the request actually succeeded and there is likely to be data in the response
+		if err.Error() == "remote error: tls: user canceled" {
+			c.logger.Warnf("Potentially benign error from HTTP connection: %s", err)
+			// continue processing as normal below
+		} else {
+			c.logger.Tracef("Failed HTTP request: %s", err)
+			var resBody []byte
+			if response != nil && response.Body != nil {
+				resBody, _ = io.ReadAll(response.Body)
+			}
+			c.recordRequestDetailsInErrorCase(bodyBytes, resBody)
 
-		return response, err
+			return response, err
+		}
 	}
 	if response.StatusCode >= 400 {
 		resBody, _ := io.ReadAll(response.Body)
