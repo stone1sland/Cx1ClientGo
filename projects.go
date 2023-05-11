@@ -482,3 +482,9 @@ func (p Project) GetConfigurationByName(configKey string) *ProjectConfigurationS
 	}
 	return nil
 }
+
+/* misc future stuff
+
+Listing of files in a scan:
+	https://deu.ast.checkmarx.net/api/repostore/project-tree/74328f1f-94ec-452f-8f1a-047d76f6764e
+*/

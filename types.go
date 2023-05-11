@@ -32,6 +32,33 @@ type ApplicationRule struct {
 	Value string `json:"value"`
 }
 
+type AuditQuery struct {
+	QueryID            uint64 `json:"Id,string"`
+	Level              string
+	Path               string
+	Modified           string
+	Source             string
+	Cwe                int64
+	Severity           uint
+	IsExecutable       bool
+	CxDescriptionId    int64
+	QueryDescriptionId string
+
+	Language string `json:"-"`
+	Group    string `json:"-"`
+	Name     string `json:"-"`
+}
+
+type AuditQueryMetadata struct {
+	Cwe                int64
+	CxDescriptionID    int64
+	IsExecutable       bool
+	Modified           string
+	Path               string
+	QueryDescriptionID string
+	Severity           uint
+}
+
 type Group struct {
 	GroupID     string              `json:"id"`
 	Name        string              `json:"name"`
@@ -79,12 +106,12 @@ type ProjectConfigurationSetting struct {
 type Query struct {
 	QueryID            uint64 `json:"queryID,string"`
 	Name               string `json:"queryName"`
-	Group              string
-	Language           string
-	Severity           string
-	CweID              int64
-	QueryDescriptionId int64
-	Custom             bool
+	Group              string `json:"group"`
+	Language           string `json:"language"`
+	Severity           string `json:"severity"`
+	CweID              int64  `json:"cweID"`
+	QueryDescriptionId int64  `json:"queryDescriptionId"`
+	Custom             bool   `json:"custom"`
 }
 
 type QueryGroup struct {
@@ -100,6 +127,12 @@ type QueryLanguage struct {
 
 type QueryCollection struct {
 	QueryLanguages []QueryLanguage
+}
+
+type QueryUpdate struct { // used when saving queries in Cx1
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Source string `json:"source"`
 }
 
 type ReportStatus struct {

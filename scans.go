@@ -128,6 +128,19 @@ func (c Cx1Client) GetScanLogsByID(scanID, engine string) ([]byte, error) {
 	return data, nil
 }
 
+func (c Cx1Client) GetScanWorkflowByID(scanID string) ([]WorkflowLog, error) {
+	var workflow []WorkflowLog
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans/%v/workflow", scanID), nil, http.Header{})
+	if err != nil {
+		c.logger.Errorf("Failed to fetch scan with ID %v: %s", scanID, err)
+		return []WorkflowLog{}, fmt.Errorf("failed to fetch scan with ID %v: %s", scanID, err)
+	}
+
+	err = json.Unmarshal(data, &workflow)
+	return workflow, err
+}
+
 func (c Cx1Client) scanProject(scanConfig map[string]interface{}) (Scan, error) {
 	scan := Scan{}
 
