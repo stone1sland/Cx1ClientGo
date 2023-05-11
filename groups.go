@@ -327,7 +327,7 @@ func (c Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]s
 			return fmt.Errorf("failed to retrieve client %v: %s", client, err)
 		}
 
-		client_role_set, err := c.GetRolesByClient(kc_client.ClientID)
+		client_role_set, err := c.GetRolesByClientID(kc_client.ClientID)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve roles for client %v: %s", client, err)
 		}
@@ -362,7 +362,7 @@ func (c Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string
 			return fmt.Errorf("failed to retrieve client %v: %s", client, err)
 		}
 
-		client_role_set, err := c.GetRolesByClient(kc_client.ClientID)
+		client_role_set, err := c.GetRolesByClientID(kc_client.ClientID)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve roles for client %v: %s", client, err)
 		}

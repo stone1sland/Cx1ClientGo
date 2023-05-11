@@ -253,6 +253,33 @@ func (c Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 	}
 	return scan, nil
 }
+func (c Cx1Client) ScanPollingDetailed(s *Scan) (Scan, error) {
+	c.logger.Infof("Polling status of scan %v", s.ScanID)
+	var err error
+	scan := *s
+	for scan.Status == "Running" {
+		time.Sleep(10 * time.Second)
+		scan, err = c.GetScanByID(scan.ScanID)
+		if err != nil {
+			c.logger.Tracef("Failed to get scan status: %v", err)
+			return scan, err
+		}
+		workflow, err := c.GetScanWorkflowByID(scan.ScanID)
+		if err != nil {
+			c.logger.Tracef("Failed to get scan workflow: %v", err)
+			return scan, err
+		}
+		status := "no details"
+		if len(workflow) > 0 {
+			status = workflow[len(workflow)-1].Info
+		}
+		c.logger.Infof(" - %v: %v", scan.Status, status)
+		if scan.Status != "Running" {
+			break
+		}
+	}
+	return scan, nil
+}
 
 func (c Cx1Client) GetUploadURL() (string, error) {
 	c.logger.Debug("Get Cx1 Upload URL")
