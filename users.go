@@ -28,10 +28,6 @@ func (c Cx1Client) GetCurrentUser() (User, error) {
 	return c.GetUserByID(whoami.UserID)
 }
 
-func (u *User) String() string {
-	return fmt.Sprintf("[%v] %v %v (%v)", ShortenGUID(u.UserID), u.FirstName, u.LastName, u.Email)
-}
-
 func (c Cx1Client) GetUsers() ([]User, error) {
 	c.logger.Debug("Get Cx1 Users")
 
@@ -161,39 +157,6 @@ func (c Cx1Client) DeleteUserByID(userid string) error {
 	return nil
 }
 
-// these functions to be deprecated/hidden in favor of simpler functions below
-func (c Cx1Client) GetUserRoleMappings(userID string, clientID string) ([]Role, error) {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.getUserRolesByClientID(userID, clientID)
-}
-
-func (c Cx1Client) GetUserASTRoleMappings(userID string) ([]Role, error) {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.getUserRolesByClientID(userID, c.GetASTAppID())
-}
-
-func (c Cx1Client) AddUserRoleMappings(userID string, clientID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.addUserRolesByClientID(userID, clientID, &roles)
-}
-
-func (c Cx1Client) AddUserASTRoleMappings(userID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.addUserRolesByClientID(userID, c.GetASTAppID(), &roles)
-}
-
-func (c Cx1Client) RemoveUserRoleMappings(userID string, clientID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.removeUserRolesByClientID(userID, clientID, &roles)
-}
-
-func (c Cx1Client) RemoveUserASTRoleMappings(userID string, roles []Role) error {
-	c.depwarn("*UserRoleMappings*", "*UserRoles*")
-	return c.removeUserRolesByClientID(userID, c.GetASTAppID(), &roles)
-}
-
-// end to-be-deprecated function block
-
 func (c Cx1Client) UserLink(u *User) string {
 	return fmt.Sprintf("%v/auth/admin/%v/console/#/realms/%v/users/%v", c.iamUrl, c.tenant, c.tenant, u.UserID)
 }
@@ -219,30 +182,11 @@ func (c Cx1Client) GetUserGroups(user *User) ([]Group, error) {
 	return user.Groups, nil
 }
 
-func (u *User) IsInGroup(group *Group) bool {
-	return u.IsInGroupByID(group.GroupID)
-}
-func (u *User) IsInGroupByID(groupId string) bool {
-	for _, g := range u.Groups {
-		if g.GroupID == groupId {
-			return true
-		}
-	}
-	return false
-}
-func (u *User) IsInGroupByName(groupName string) bool {
-	for _, g := range u.Groups {
-		if g.Name == groupName {
-			return true
-		}
-	}
-	return false
-}
-
 func (c Cx1Client) AssignUserToGroup(user *User, groupId string) error {
-	c.logger.Warnf("AssignUserToGroup will be replace by clearer AssignUserToGroupByID")
+	c.depwarn("AssignUserToGroup", "AssignUserToGroupByID")
 	return c.AssignUserToGroupByID(user, groupId)
 }
+
 func (c Cx1Client) AssignUserToGroupByID(user *User, groupId string) error {
 	if !user.IsInGroupByID(groupId) {
 		params := map[string]string{
@@ -264,6 +208,12 @@ func (c Cx1Client) AssignUserToGroupByID(user *User, groupId string) error {
 		}
 
 		// TODO: Should user structure be updated to include the new group membership? (get group obj, append to list)
+		group, err := c.GetGroupByID(groupId)
+		if err != nil {
+			c.logger.Tracef("Failed to get group info for %v: %s", groupId, err)
+			return err
+		}
+		user.Groups = append(user.Groups, group)
 	}
 	return nil
 }
@@ -293,34 +243,24 @@ func (c Cx1Client) RemoveUserFromGroupByID(user *User, groupId string) error {
 			return err
 		}
 
-		// TODO: should user structure be updated to remove the group also? (iterate over list & remove element?)
+		index := -1
+		for id, g := range user.Groups {
+			if g.GroupID == groupId {
+				index = id
+				break
+			}
+		}
+
+		if index != -1 {
+			user.Groups = RemoveGroup(user.Groups, index)
+		}
 	}
 	return nil
 }
 
-func (u *User) HasRole(role *Role) bool {
-	return u.HasRoleByID(role.RoleID)
-}
-func (u *User) HasRoleByID(roleID string) bool {
-	for _, r := range u.Roles {
-		if r.RoleID == roleID {
-			return true
-		}
-	}
-	return false
-}
-func (u *User) HasRoleByName(role string) bool {
-	for _, r := range u.Roles {
-		if r.Name == role {
-			return true
-		}
-	}
-	return false
-}
-
 // New generic functions for roles for convenience
 func (c Cx1Client) GetUserRoles(user *User) ([]Role, error) {
-	appRoles, err := c.GetUserAppRoles(user)
+	appRoles, err := c.getUserRolesByClientID(user.UserID, c.GetASTAppID())
 	if err != nil {
 		return []Role{}, nil
 	}
@@ -353,6 +293,8 @@ func (c Cx1Client) AddUserRoles(user *User, roles *[]Role) error {
 		err := c.AddUserAppRoles(user, &appRoles)
 		if err != nil {
 			return fmt.Errorf("failed to add application roles: %s", err)
+		} else {
+			user.Roles = append(user.Roles, appRoles...)
 		}
 	}
 
@@ -360,6 +302,8 @@ func (c Cx1Client) AddUserRoles(user *User, roles *[]Role) error {
 		err := c.AddUserIAMRoles(user, &iamRoles)
 		if err != nil {
 			return fmt.Errorf("failed to add IAM roles: %s", err)
+		} else {
+			user.Roles = append(user.Roles, iamRoles...)
 		}
 	}
 
@@ -367,14 +311,35 @@ func (c Cx1Client) AddUserRoles(user *User, roles *[]Role) error {
 }
 
 func (c Cx1Client) RemoveUserRoles(user *User, roles *[]Role) error {
-	appRoles := []Role{}
-	iamRoles := []Role{}
+	appRoles := []Role{} // roles to remove
+	iamRoles := []Role{} // roles to remove
+	remainingRoles := []Role{}
 
-	for _, r := range *roles {
+	for _, r := range user.Roles {
 		if r.ClientID == c.GetASTAppID() {
-			appRoles = append(appRoles, r)
+			matched := false
+			for _, ar := range *roles { // is this user's app-role to be removed
+				if ar.RoleID == r.RoleID { // yes, remove it
+					appRoles = append(appRoles, r)
+					matched = true
+					break
+				}
+			}
+			if !matched { // not removing this role, keep it as remaining
+				remainingRoles = append(remainingRoles, r)
+			}
 		} else if r.ClientID == c.GetTenantID() {
-			iamRoles = append(iamRoles, r)
+			matched := false
+			for _, ir := range *roles { // is this user's app-role to be removed
+				if ir.RoleID == r.RoleID { // yes, remove it
+					iamRoles = append(iamRoles, r)
+					matched = true
+					break
+				}
+			}
+			if !matched { // not removing this role, keep it as remaining
+				remainingRoles = append(remainingRoles, r)
+			}
 		} else {
 			c.logger.Errorf("Request to remove role from unhandled client ID: %v", r.String())
 		}
@@ -394,8 +359,21 @@ func (c Cx1Client) RemoveUserRoles(user *User, roles *[]Role) error {
 		}
 	}
 
+	user.Roles = remainingRoles
+
 	return nil
 }
+
+// more specific functions related to role management.
+/*
+	In cx1 there are two different types of roles: Application roles and IAM roles
+
+	IAM roles have permissions related to user management - and access control in general - with functionality provided by KeyCloak.
+		In KeyCloak terms, these roles are scoped to your tenant Realm. Thus we have the "*UserIAMRoles" functions.
+	Application roles have permissions related to the CheckmarxOne product functionality such as creating projects, starting scans, and generating reports.
+		In KeyCloak terms, the CheckmarxOne application is a Client within your tenant Realm. Thus we have the "*UserAppRoles" functions.
+
+*/
 
 func (c Cx1Client) GetUserAppRoles(user *User) ([]Role, error) {
 	return c.getUserRolesByClientID(user.UserID, c.GetASTAppID())
@@ -488,3 +466,36 @@ func (c Cx1Client) removeUserKCRoles(userID string, roles *[]Role) error {
 	_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/users/%v/role-mappings/realm", userID), bytes.NewReader(jsonBody), nil)
 	return err
 }
+
+// these functions to be deprecated/hidden in favor of simpler functions below
+func (c Cx1Client) GetUserRoleMappings(userID string, clientID string) ([]Role, error) {
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.getUserRolesByClientID(userID, clientID)
+}
+
+func (c Cx1Client) GetUserASTRoleMappings(userID string) ([]Role, error) {
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.getUserRolesByClientID(userID, c.GetASTAppID())
+}
+
+func (c Cx1Client) AddUserRoleMappings(userID string, clientID string, roles []Role) error {
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.addUserRolesByClientID(userID, clientID, &roles)
+}
+
+func (c Cx1Client) AddUserASTRoleMappings(userID string, roles []Role) error {
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.addUserRolesByClientID(userID, c.GetASTAppID(), &roles)
+}
+
+func (c Cx1Client) RemoveUserRoleMappings(userID string, clientID string, roles []Role) error {
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.removeUserRolesByClientID(userID, clientID, &roles)
+}
+
+func (c Cx1Client) RemoveUserASTRoleMappings(userID string, roles []Role) error {
+	c.depwarn("*UserRoleMappings*", "*UserRoles*")
+	return c.removeUserRolesByClientID(userID, c.GetASTAppID(), &roles)
+}
+
+// end to-be-deprecated function block
