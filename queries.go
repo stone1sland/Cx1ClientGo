@@ -60,6 +60,11 @@ func (c Cx1Client) DeleteQueryByName(level, language, group, query string) error
 
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", level, path), nil, nil)
 	if err != nil {
+		// currently there's a bug where the response can be error 500 even if it succeeded.
+		if err.Error() == "HTTP 500 Internal Server Error: failed to connect to SAST Engine" || err.Error() == "HTTP 500 Internal Server Error: failed to check request status: query param 'type' is invalid or missing" {
+			c.logger.Warnf("Potentially benign error returned: %s", err)
+			return nil
+		}
 		return err
 	}
 
