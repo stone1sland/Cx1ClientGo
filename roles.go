@@ -212,7 +212,7 @@ func (c Cx1Client) GetASTRoles() ([]Role, error) {
 
 func (c Cx1Client) GetAppRoles() ([]Role, error) {
 	c.logger.Debug("Getting roles set for ast-app client")
-	return c.GetRolesByClient(c.GetASTAppID())
+	return c.GetRolesByClientID(c.GetASTAppID())
 }
 
 func (c Cx1Client) GetAppRoleByName(name string) (Role, error) {
