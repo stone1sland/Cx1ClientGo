@@ -218,7 +218,7 @@ func (c Cx1Client) auditGetEngineStatusByID(auditSessionId string) (bool, error)
 }
 
 func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
-	c.logger.Infof("Polling status of cx-audit engine for session %v", auditSessionId)
+	c.logger.Debugf("Polling status of cx-audit engine for session %v", auditSessionId)
 	status := false
 	var err error
 	pollingCounter := 0
@@ -291,7 +291,7 @@ func (c Cx1Client) auditGetLanguagesByID(auditSessionId string) ([]string, error
 }
 
 func (c Cx1Client) AuditLanguagePollingByID(auditSessionId string) ([]string, error) {
-	c.logger.Infof("Polling status of language check for audit session %v", auditSessionId)
+	c.logger.Debugf("Polling status of language check for audit session %v", auditSessionId)
 	languages := []string{}
 	var err error
 	pollingCounter := 0
@@ -365,7 +365,7 @@ func (c Cx1Client) auditGetScanStatusByID(auditSessionId string) (bool, error) {
 }
 
 func (c Cx1Client) AuditScanPollingByID(auditSessionId string) error {
-	c.logger.Infof("Polling status of scan for audit session %v", auditSessionId)
+	c.logger.Debugf("Polling status of scan for audit session %v", auditSessionId)
 	status := false
 	var err error
 	pollingCounter := 0

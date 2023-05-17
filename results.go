@@ -84,6 +84,16 @@ func (c Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
 	return resultResponse.TotalCount, nil
 }
 
+// convenience function
+func (r ScanResult) CreateResultsPredicate(projectId string) ResultsPredicates {
+	return ResultsPredicates{
+		SimilarityID: r.SimilarityID,
+		ProjectID:    projectId,
+		State:        r.State,
+		Severity:     r.Severity,
+	}
+}
+
 // results
 func (c Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
 	c.logger.Debugf("Adding %d results predicates", len(predicates))
