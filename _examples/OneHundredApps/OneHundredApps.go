@@ -24,6 +24,10 @@ func main() {
 	logger.SetFormatter(myformatter)
 	logger.SetOutput(os.Stdout)
 
+	if len(os.Args) < 5 {
+		log.Fatalf("Usage: go run . <cx1 url> <iam url> <tenant> <api key>")
+	}
+
 	logger.Info("Starting")
 
 	base_url := os.Args[1]
@@ -35,7 +39,7 @@ func main() {
 	//	project_repo := os.Args[7]
 	//	branch_name := os.Args[8]
 
-	proxyURL, err := url.Parse("http://127.0.0.1:8080")
+	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
 	transport := &http.Transport{}
 	transport.Proxy = http.ProxyURL(proxyURL)
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
@@ -45,7 +49,7 @@ func main() {
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {
-		log.Error("Error creating client: " + err.Error())
+		log.Fatalf("Error creating client: %s", err)
 		return
 	}
 
