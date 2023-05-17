@@ -146,7 +146,7 @@ func (c Cx1Client) sendRequestRaw(method, url string, body io.Reader, header htt
 			c.logger.Warnf("Potentially benign error from HTTP connection: %s", err)
 			// continue processing as normal below
 		} else {
-			c.logger.Tracef("Failed HTTP request: %s", err)
+			c.logger.Tracef("Failed HTTP request: '%s'", err)
 			var resBody []byte
 			if response != nil && response.Body != nil {
 				resBody, _ = io.ReadAll(response.Body)
