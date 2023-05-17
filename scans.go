@@ -28,6 +28,14 @@ func (c Cx1Client) GetScanByID(scanID string) (Scan, error) {
 	json.Unmarshal([]byte(data), &scan)
 	return scan, nil
 }
+func (c Cx1Client) DeleteScanByID(scanID string) error {
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/scans/%v", scanID), nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete scan with ID %v: %s", scanID, err)
+	}
+
+	return nil
+}
 
 func (c Cx1Client) GetScanMetadata(scanID string) (ScanMetadata, error) {
 	c.depwarn("GetScanMetadata", "GetScanMetadataByID")

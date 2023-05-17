@@ -47,6 +47,7 @@ type AuditQuery struct {
 	Language string `json:"-"`
 	Group    string `json:"-"`
 	Name     string `json:"-"`
+	LevelID  string `json:"-"`
 }
 
 type AuditQueryMetadata struct {

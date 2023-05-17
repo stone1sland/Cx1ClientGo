@@ -47,25 +47,73 @@ func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQu
 		return q, err
 	}
 	q.ParsePath()
+	q.LevelID = level
 	return q, nil
 }
 
-func (c Cx1Client) DeleteQuery(query AuditQuery) error {
-	return c.DeleteQueryByName(query.Level, query.Language, query.Group, query.Name)
+func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]AuditQuery, error) {
+	c.logger.Debugf("Get all queries for %v", level)
+
+	var url string
+	var queries []AuditQuery
+	switch level {
+	case "Corp":
+		url = "/cx-audit/queries"
+	case "Project":
+		url = fmt.Sprintf("/cx-audit/queries?projectId=%v", levelId)
+	default:
+		return queries, fmt.Errorf("invalid level %v, options are currently: Corp or Project", level)
+	}
+
+	response, err := c.sendRequest(http.MethodGet, url, nil, nil)
+	if err != nil {
+		return queries, err
+	}
+
+	err = json.Unmarshal(response, &queries)
+	if err != nil {
+		return queries, err
+	}
+
+	for id := range queries {
+		queries[id].ParsePath()
+	}
+
+	return queries, nil
 }
 
-func (c Cx1Client) DeleteQueryByName(level, language, group, query string) error {
+func FindQueryByName(queries []AuditQuery, level, language, group, name string) (AuditQuery, error) {
+	for _, q := range queries {
+		if q.Level == level && q.Language == language && q.Group == group && q.Name == name {
+			return q, nil
+		}
+	}
+
+	return AuditQuery{}, fmt.Errorf("no query found matching [%v] %v -> %v -> %v", level, language, group, name)
+}
+
+func (c Cx1Client) DeleteQuery(query AuditQuery) error {
+	return c.DeleteQueryByName(query.Level, query.LevelID, query.Language, query.Group, query.Name)
+}
+
+func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query string) error {
 	c.logger.Debugf("Delete %v query by name: %v -> %v -> %v", level, language, group, query)
 	path := fmt.Sprintf("queries%%2F%v%%2F%v%%2F%v%%2F%v", language, group, query, query)
 
-	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", level, path), nil, nil)
+	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", levelID, path), nil, nil)
 	if err != nil {
 		// currently there's a bug where the response can be error 500 even if it succeeded.
-		if err.Error() == "HTTP 500 Internal Server Error: failed to connect to SAST Engine" || err.Error() == "HTTP 500 Internal Server Error: failed to check request status: query param 'type' is invalid or missing" {
-			c.logger.Warnf("Potentially benign error returned: %s", err)
-			return nil
+		queries, err2 := c.GetQueriesByLevelID(level, levelID)
+		if err2 != nil {
+			return fmt.Errorf("error while deleting query (%s) followed by error while checking if the query was deleted (%s)", err, err2)
 		}
-		return err
+		q, err2 := FindQueryByName(queries, level, language, group, query)
+		if err2 != nil {
+			c.logger.Warnf("While deleting the query an error was returned (%s) but the query was deleted", err)
+			return nil
+		} else {
+			return fmt.Errorf("error while deleting query (%s) and the query %v still exists", err, q)
+		}
 	}
 
 	return nil
@@ -170,7 +218,7 @@ func (c Cx1Client) auditGetEngineStatusByID(auditSessionId string) (bool, error)
 }
 
 func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
-	c.logger.Infof("Polling status of cx-audit engine for session %v", auditSessionId)
+	c.logger.Debugf("Polling status of cx-audit engine for session %v", auditSessionId)
 	status := false
 	var err error
 	pollingCounter := 0
@@ -243,7 +291,7 @@ func (c Cx1Client) auditGetLanguagesByID(auditSessionId string) ([]string, error
 }
 
 func (c Cx1Client) AuditLanguagePollingByID(auditSessionId string) ([]string, error) {
-	c.logger.Infof("Polling status of language check for audit session %v", auditSessionId)
+	c.logger.Debugf("Polling status of language check for audit session %v", auditSessionId)
 	languages := []string{}
 	var err error
 	pollingCounter := 0
@@ -317,7 +365,7 @@ func (c Cx1Client) auditGetScanStatusByID(auditSessionId string) (bool, error) {
 }
 
 func (c Cx1Client) AuditScanPollingByID(auditSessionId string) error {
-	c.logger.Infof("Polling status of scan for audit session %v", auditSessionId)
+	c.logger.Debugf("Polling status of scan for audit session %v", auditSessionId)
 	status := false
 	var err error
 	pollingCounter := 0
@@ -360,19 +408,22 @@ func (c Cx1Client) GetAuditSessionByID(projectId, scanId string, fastInit bool) 
 	}
 	session := ""
 	reusedSession := false
-	if !available && len(sessions) > 0 {
-		c.logger.Warnf("No additional audit sessions are available, but %d matching sessions exist. Re-using the first session %v", len(sessions), sessions[0])
+	if len(sessions) > 0 && (fastInit || !available) {
+		if fastInit { // reuse existing
+			c.logger.Debugf("FastInit: re-using the first session %v", len(sessions), sessions[0])
+		} else { // !available
+			c.logger.Warnf("No additional audit sessions are available, but %d matching sessions exist. Re-using the first session %v", len(sessions), sessions[0])
+		}
 		session = sessions[0]
 		reusedSession = true
-		c.AuditSessionKeepAlive(session)
 	} else {
 		session, err = c.AuditCreateSessionByID(projectId, scanId)
 		if err != nil {
 			c.logger.Errorf("Error creating cxaudit session: %s", err)
 			return "", err
 		}
-		c.AuditSessionKeepAlive(session)
 	}
+	c.AuditSessionKeepAlive(session)
 
 	err = c.AuditEnginePollingByID(session)
 	if err != nil {
@@ -545,12 +596,38 @@ func (c Cx1Client) AuditCompilePollingByID(auditSessionId string) error {
 	return fmt.Errorf("unknown error")
 }
 
-func (q AuditQuery) CreateOverride(level string) AuditQuery {
+func (q AuditQuery) CreateTenantOverride() AuditQuery {
 	new_query := q
-	new_query.Level = level
+	new_query.Level = "Corp"
+	new_query.LevelID = "Corp"
 	return new_query
 }
-func (c Cx1Client) AuditCreateQuery(language, group, name string) (AuditQuery, error) {
+func (q AuditQuery) CreateProjectOverrideByID(projectId string) AuditQuery {
+	new_query := q
+	new_query.Level = "Project"
+	new_query.LevelID = projectId
+	return new_query
+}
+func (q AuditQuery) CreateApplicationOverrideByID(applicationId string) AuditQuery {
+	new_query := q
+	new_query.Level = "Application"
+	new_query.LevelID = applicationId
+	return new_query
+}
+
+/*
+
+	WebAudit use cases:
+		1. Create new Corp/Tenant-level query with no existing Cx (product default) query: AuditNewQuery function + AuditCreateCorpQuery (POST to /cx-audit/queries/:session)
+		2. Create new Corp/Tenant-level over an existing Cx (product default) query: UpdateQuery function (PUT to /cx-audit/queries/Corp)
+		3. Create new override on Project or Application level, where a Corp/Tenant or Cx-level base query already exists: UpdateQuery function (PUT to /cx-audit/queries/ProjectID or AppID)
+		4. Update an existing override on Corp/Tenant, Project, or Application level: UpdateQuery function (PUT to /cx-audit/queries/:level
+
+	Note: Application-level queries are not yet implemented in Cx1.
+
+*/
+
+func (c Cx1Client) AuditNewQuery(language, group, name string) (AuditQuery, error) {
 	newQuery, err := c.GetQueryByName("Corp", language, "CxDefaultQueryGroup", "CxDefaultQuery")
 	if err != nil {
 		return newQuery, err
@@ -558,11 +635,10 @@ func (c Cx1Client) AuditCreateQuery(language, group, name string) (AuditQuery, e
 
 	newQuery.Group = group
 	newQuery.Name = name
-
 	return newQuery, nil
 }
 
-func (c Cx1Client) UpdateQuery(auditSessionId string, query AuditQuery) error {
+func (c Cx1Client) AuditCreateCorpQuery(auditSessionId string, query AuditQuery) (AuditQuery, error) {
 	folder := fmt.Sprintf("queries/%v/%v/", query.Language, query.Group)
 	var qc struct {
 		Name     string `json:"name"`
@@ -578,7 +654,7 @@ func (c Cx1Client) UpdateQuery(auditSessionId string, query AuditQuery) error {
 	qc.Name = query.Name
 	qc.Source = query.Source
 	qc.Path = folder
-	qc.Metadata.IsExecutable = true
+	qc.Metadata.IsExecutable = query.IsExecutable
 	qc.Metadata.Path = query.Path
 	qc.Metadata.Severity = query.Severity
 
@@ -586,28 +662,28 @@ func (c Cx1Client) UpdateQuery(auditSessionId string, query AuditQuery) error {
 
 	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/cx-audit/queries/%v", auditSessionId), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		return err
+		return AuditQuery{}, err
 	}
 
 	if string(response) != "" {
-		return fmt.Errorf("creating query returned error: %v", string(response))
+		return AuditQuery{}, fmt.Errorf("creating query returned error: %v", string(response))
 	}
-	return nil
+	return c.GetQueryByName("Corp", query.Language, query.Group, query.Name)
 }
 
-/*
 // updating queries via PUT is possible, but only allows changing the source code, not metadata around each query.
+// this will be fixed in the future
+// PUT is the only option to create an override on the project-level (and maybe in the future on application-level)
+func (c Cx1Client) UpdateQuery(query AuditQuery) error { // level = projectId or "Corp"
+	c.logger.Debugf("Saving query %v on level %v", query.Path, query.Level)
 
-func (c Cx1Client) UpdateQuery(level, language, group, query, code string) error { // level = projectId or "Corp"
-	path := fmt.Sprintf("queries/%v/%v/%v/%v.cs", language, group, query, query)
-	c.logger.Debugf("Saving query %v on level %v", path, level)
 	q := QueryUpdate{
-		Name:   query,
-		Path:   path,
-		Source: code,
+		Name:   query.Name,
+		Path:   query.Path,
+		Source: query.Source,
 	}
 
-	return c.UpdateQueries(level, []QueryUpdate{q})
+	return c.UpdateQueries(query.LevelID, []QueryUpdate{q})
 }
 
 func (c Cx1Client) UpdateQueries(level string, queries []QueryUpdate) error {
@@ -635,7 +711,7 @@ func (c Cx1Client) UpdateQueries(level string, queries []QueryUpdate) error {
 	} else {
 		return nil
 	}
-} */
+}
 
 func (q AuditQuery) String() string {
 	return fmt.Sprintf("[%d] %v: %v", q.QueryID, q.Level, q.Path)
@@ -680,6 +756,23 @@ func (c Cx1Client) GetQueries() (QueryCollection, error) {
 	}
 
 	return qc, err
+}
+
+// convenience
+func (c Cx1Client) GetSeverityID(severity string) uint {
+	switch strings.ToUpper(severity) {
+	case "INFO":
+		return 0
+	case "INFORMATION":
+		return 0
+	case "LOW":
+		return 1
+	case "MEDIUM":
+		return 2
+	case "HIGH":
+		return 3
+	}
+	return 0
 }
 
 func (qg QueryGroup) GetQueryByName(name string) *Query {
