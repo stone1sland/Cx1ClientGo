@@ -26,7 +26,7 @@ func (c Cx1Client) RequestNewReportByID(scanID, projectID, branch, reportType st
 			"sections": []string{
 				"ScanSummary",
 				"ExecutiveSummary",
-				"ScanResult",
+				"ScanResults",
 			},
 			"scanners": []string{"SAST"},
 			"host":     "",
