@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // Reports
@@ -73,4 +74,21 @@ func (c Cx1Client) DownloadReport(reportUrl string) ([]byte, error) {
 		return []byte{}, fmt.Errorf("failed to download report from url %v: %s", reportUrl, err)
 	}
 	return data, nil
+}
+
+// convenience
+func (c Cx1Client) ReportPollingByID(reportID string) (string, error) {
+	for {
+		status, err := c.GetReportStatusByID(reportID)
+		if err != nil {
+			return "", err
+		}
+
+		if status.Status == "completed" {
+			return status.ReportURL, nil
+		} else if status.Status == "failed" {
+			return "", fmt.Errorf("report generation failed")
+		}
+		time.Sleep(10 * time.Second)
+	}
 }

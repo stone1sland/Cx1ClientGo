@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 // Projects
@@ -339,6 +340,52 @@ func (c Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error)
 	}
 
 	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil)
+	if err != nil {
+		c.logger.Tracef("Failed to fetch scans of project %v: %s", projectID, err)
+		return scanResponse.Scans, fmt.Errorf("failed to fetch scans of project %v: %s", projectID, err)
+	}
+
+	err = json.Unmarshal(data, &scanResponse)
+	return scanResponse.Scans, err
+}
+
+func (f ScanFilter) AddURLValues(params *url.Values) {
+	if f.Offset != 0 {
+		params.Add("offset", strconv.Itoa(f.Offset))
+	}
+	if f.Limit != 0 {
+		params.Add("limit", strconv.Itoa(f.Limit))
+	}
+
+	for _, b := range f.Branches {
+		params.Add("branches", b)
+	}
+	for _, k := range f.TagKeys {
+		params.Add("tags-keys", k)
+	}
+	for _, v := range f.TagValues {
+		params.Add("tags-values", v)
+	}
+	for _, s := range f.Statuses {
+		params.Add("statuses", s)
+	}
+}
+
+func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
+	var scanResponse struct {
+		TotalCount         uint64
+		FilteredTotalCount uint64
+		Scans              []Scan
+	}
+
+	query := url.Values{
+		"project-id": {projectID},
+		"sort":       {"+created_at"},
+	}
+
+	filter.AddURLValues(&query)
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", query.Encode()), nil, nil)
 	if err != nil {
 		c.logger.Tracef("Failed to fetch scans of project %v: %s", projectID, err)
 		return scanResponse.Scans, fmt.Errorf("failed to fetch scans of project %v: %s", projectID, err)
