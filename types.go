@@ -203,6 +203,15 @@ type Scan struct {
 	SourceOrigin string   `json:"sourceOrigin"`
 }
 
+type ScanFilter struct {
+	Limit     int      `json:"limit"`
+	Offset    int      `json:"offset"`
+	TagKeys   []string `json:"tags-keys"`
+	TagValues []string `json:"tags-values"`
+	Statuses  []string `json:"statuses"`
+	Branches  []string `json:"branches"`
+}
+
 type ScanConfiguration struct {
 	ScanType string            `json:"type"`
 	Values   map[string]string `json:"value"`
