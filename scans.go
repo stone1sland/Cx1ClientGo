@@ -251,7 +251,7 @@ func (c Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 		time.Sleep(10 * time.Second)
 		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
-			c.logger.Tracef("Failed to get scan status: %v", err)
+			c.logger.Tracef("Failed to get scan status: %s", err)
 			return scan, err
 		}
 		c.logger.Infof(" - %v", scan.Status)
@@ -269,12 +269,12 @@ func (c Cx1Client) ScanPollingDetailed(s *Scan) (Scan, error) {
 		time.Sleep(10 * time.Second)
 		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
-			c.logger.Tracef("Failed to get scan status: %v", err)
+			c.logger.Tracef("Failed to get scan status: %s", err)
 			return scan, err
 		}
 		workflow, err := c.GetScanWorkflowByID(scan.ScanID)
 		if err != nil {
-			c.logger.Tracef("Failed to get scan workflow: %v", err)
+			c.logger.Tracef("Failed to get scan workflow: %s", err)
 			return scan, err
 		}
 		status := "no details"

@@ -443,7 +443,7 @@ func (c Cx1Client) getUserKCRoles(userID string) ([]Role, error) {
 	return roles, err
 }
 func (c Cx1Client) addUserKCRoles(userID string, roles *[]Role) error {
-	c.logger.Debugf("Add Cx1 Tenant realm Rolemappings for userid %v and clientid %v", userID)
+	c.logger.Debugf("Add Cx1 Tenant realm Rolemappings for userid %v", userID)
 
 	jsonBody, err := json.Marshal(roles)
 	if err != nil {
@@ -455,7 +455,7 @@ func (c Cx1Client) addUserKCRoles(userID string, roles *[]Role) error {
 	return err
 }
 func (c Cx1Client) removeUserKCRoles(userID string, roles *[]Role) error {
-	c.logger.Debugf("Add Cx1 Tenant realm Rolemappings for userid %v and clientid %v", userID)
+	c.logger.Debugf("Add Cx1 Tenant realm Rolemappings for userid %v", userID)
 
 	jsonBody, err := json.Marshal(roles)
 	if err != nil {

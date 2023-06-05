@@ -252,7 +252,7 @@ func (c Cx1Client) GetCombinedRoleByName(name string) (Role, error) {
 }
 
 func (c Cx1Client) GetRoleByName(name string) (Role, error) {
-	c.logger.Debug("Getting any role named: %v", name)
+	c.logger.Debugf("Getting any role named: %v", name)
 
 	role, err := c.GetAppRoleByName(name)
 	if err == nil {
