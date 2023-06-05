@@ -56,7 +56,6 @@ func (c Cx1Client) GetPresetCount() (uint64, error) {
 
 func (c Cx1Client) GetPresetByName(name string) (Preset, error) {
 	c.logger.Debugf("Get preset by name %v", name)
-	// https://deu.ast.checkmarx.net/api/presets?offset=0&limit=20&include_details=false&name=b&exact_match=false
 	var preset_response struct {
 		TotalCount uint64   `json:"totalCount"`
 		Presets    []Preset `json:"presets"`
