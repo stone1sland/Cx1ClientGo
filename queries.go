@@ -410,7 +410,7 @@ func (c Cx1Client) GetAuditSessionByID(projectId, scanId string, fastInit bool) 
 	reusedSession := false
 	if len(sessions) > 0 && (fastInit || !available) {
 		if fastInit { // reuse existing
-			c.logger.Debugf("FastInit: re-using the first session %v", len(sessions), sessions[0])
+			c.logger.Debugf("FastInit: re-using the first session %v", sessions[0])
 		} else { // !available
 			c.logger.Warnf("No additional audit sessions are available, but %d matching sessions exist. Re-using the first session %v", len(sessions), sessions[0])
 		}

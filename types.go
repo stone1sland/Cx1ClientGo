@@ -69,6 +69,13 @@ type Group struct {
 	Filled      bool                `json:"-"`
 }
 
+type DataImport struct {
+	MigrationId string   `json:"migrationId"`
+	Status      string   `json:"status"`
+	CreatedAt   string   `json:"createdAt"`
+	Logs        []string `json:"logs"`
+}
+
 type Preset struct {
 	PresetID    uint64   `json:"id"`
 	Name        string   `json:"name"`
