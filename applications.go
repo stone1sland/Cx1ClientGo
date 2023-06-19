@@ -35,6 +35,18 @@ func (c Cx1Client) GetApplications(limit uint) ([]Application, error) {
 	return ApplicationResponse.Applications, err
 }
 
+func (c Cx1Client) GetApplicationById(id string) (Application, error) {
+	c.logger.Debugf("Get Cx1 Applications by id: %v", id)
+	var application Application
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/applications/%v", id), nil, nil)
+	if err != nil {
+		return application, err
+	}
+
+	err = json.Unmarshal(response, &application)
+	return application, err
+}
+
 func (c Cx1Client) GetApplicationsByName(name string, limit uint64) ([]Application, error) {
 	c.logger.Debugf("Get Cx1 Applications by name: %v", name)
 
