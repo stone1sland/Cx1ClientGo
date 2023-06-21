@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 
 	"github.com/cxpsemea/Cx1ClientGo"
 	"github.com/sirupsen/logrus"
@@ -46,14 +45,15 @@ func main() {
 		logger.Fatalf("Error creating client: %s", err)
 	}
 
-	accessAssignments, err := cx1client.CheckAccessibleResources([]string{"tenant", "project", "application"}, "ast-scanner")
+	allAccess, accessibleResources, err := cx1client.CheckAccessibleResources([]string{"tenant", "project", "application"}, "ast-scanner")
 	if err != nil {
 		logger.Fatalf("Failed to check current user access assignments: %s", err)
 	}
 
-	logger.Infof("Current user has the following access: ")
-	for _, a := range accessAssignments {
-		logger.Infof(" - %v %v: %v", a.ResourceType, a.ResourceName, strings.Join(a.EntityRoles, ", "))
+	logger.Infof("Current user has access to all: %b", allAccess)
+	logger.Infof("Current user has the following resources accessible: ")
+	for _, a := range accessibleResources {
+		logger.Infof(" - %v %v: %v", a.ResourceType, a.ResourceID)
 	}
 
 	tenantId := cx1client.GetTenantID()
