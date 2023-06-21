@@ -16,6 +16,18 @@ type Cx1Client struct {
 	logger  *logrus.Logger
 }
 
+type AccessAssignment struct {
+	TenantID     string   `json:"tenantID"`
+	EntityID     string   `json:"entityID"`
+	EntityType   string   `json:"entityType"`
+	EntityName   string   `json:"entityName"`
+	EntityRoles  []string `json:"entityRoles"`
+	ResourceID   string   `json:"resourceID"`
+	ResourceType string   `json:"resourceType"`
+	ResourceName string   `json:"resourceName"`
+	CreatedAt    string   `json:"createdAt"`
+}
+
 type Application struct {
 	ApplicationID string            `json:"id"`
 	Name          string            `json:"name"`
@@ -74,6 +86,14 @@ type DataImport struct {
 	Status      string   `json:"status"`
 	CreatedAt   string   `json:"createdAt"`
 	Logs        []string `json:"logs"`
+}
+
+type OIDCClient struct {
+	ID           string `json:"id"`
+	ClientID     string `json:"clientId"`
+	Enabled      bool   `json:"enabled"`
+	ClientSecret string `json:"secret"`
+	Creator      string `json:"-"`
 }
 
 type Preset struct {
@@ -168,11 +188,13 @@ type ResultsPredicates struct {
 	CreatedAt    string `json:"createdAt"`
 }
 
+/*
 type KeyCloakClient struct {
 	ClientID string `json:"id"`
 	Name     string `json:"clientId"`
 	Enabled  bool
-}
+}*/
+
 type Role struct {
 	ClientID    string `json:"containerId"` // the 'client' in Keycloak - AST roles with have the "ast-app" client ID
 	RoleID      string `json:"id"`

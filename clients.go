@@ -1,15 +1,16 @@
 package Cx1ClientGo
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 )
 
 // Roles and Clients
-func (c Cx1Client) GetClients() ([]KeyCloakClient, error) {
-	c.logger.Debug("Getting KeyCloak Clients")
-	var clients []KeyCloakClient
+func (c Cx1Client) GetClients() ([]OIDCClient, error) {
+	c.logger.Debug("Getting OIDC Clients")
+	var clients []OIDCClient
 
 	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/clients?briefRepresentation=true", nil, nil)
 	if err != nil {
@@ -21,23 +22,50 @@ func (c Cx1Client) GetClients() ([]KeyCloakClient, error) {
 	return clients, err
 }
 
-func (c Cx1Client) GetClientByName(clientName string) (KeyCloakClient, error) {
-	c.logger.Debugf("Getting KeyCloak client with name %v", clientName)
+func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
+	c.logger.Debugf("Getting OIDC client with name %v", clientName)
 
-	var client KeyCloakClient
+	var client OIDCClient
 	clients, err := c.GetClients()
 	if err != nil {
 		return client, err
 	}
 
 	for _, c := range clients {
-		if c.Name == clientName {
+		if c.ClientID == clientName {
 			client = c
 			return client, nil
 		}
 	}
 
 	return client, fmt.Errorf("no such client %v found", clientName)
+}
+
+func (c Cx1Client) CreateClient(name string) (OIDCClient, error) {
+	c.logger.Debugf("Creating OIDC client with name %v", name)
+
+	body := map[string]interface{}{
+		"enabled":      true,
+		"attributes":   map[string]interface{}{},
+		"redirectUris": []string{},
+		"clientId":     name,
+		"protocol":     "openid-connect",
+	}
+
+	jsonBody, _ := json.Marshal(body)
+
+	_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", "clients", bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return OIDCClient{}, err
+	}
+
+	return c.GetClientByName(name)
+}
+
+func (c Cx1Client) DeleteClientByID(id string) error {
+	c.logger.Debugf("Deleting OIDC client with ID %v", id)
+	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("clients/%v", id), nil, nil)
+	return err
 }
 
 func (c Cx1Client) GetTenantID() string {
