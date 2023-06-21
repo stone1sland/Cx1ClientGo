@@ -54,7 +54,7 @@ func (c Cx1Client) CreateClient(name string) (OIDCClient, error) {
 
 	jsonBody, _ := json.Marshal(body)
 
-	_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", "clients", bytes.NewReader(jsonBody), nil)
+	_, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", "/clients", bytes.NewReader(jsonBody), nil)
 	if err != nil {
 		return OIDCClient{}, err
 	}
@@ -64,8 +64,20 @@ func (c Cx1Client) CreateClient(name string) (OIDCClient, error) {
 
 func (c Cx1Client) DeleteClientByID(id string) error {
 	c.logger.Debugf("Deleting OIDC client with ID %v", id)
-	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("clients/%v", id), nil, nil)
+	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/clients/%v", id), nil, nil)
 	return err
+}
+
+func (c Cx1Client) GetServiceAccountByID(oidcId string) (User, error) {
+	c.logger.Debugf("Getting service account user behind OIDC client with ID %v", oidcId)
+	var user User
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v/service-account-user", oidcId), nil, nil)
+	if err != nil {
+		return user, err
+	}
+
+	err = json.Unmarshal(response, &user)
+	return user, err
 }
 
 func (c Cx1Client) GetTenantID() string {
@@ -112,7 +124,7 @@ func (c Cx1Client) GetASTAppID() string {
 			return ""
 		}
 
-		astAppID = client.ClientID
+		astAppID = client.ID
 	}
 
 	return astAppID
