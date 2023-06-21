@@ -39,7 +39,7 @@ func main() {
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	httpClient := &http.Client{}
-	httpClient.Transport = transport
+	//httpClient.Transport = transport
 
 	cx1client, err := Cx1ClientGo.NewAPIKeyClient(httpClient, base_url, iam_url, tenant, api_key, logger)
 	if err != nil {

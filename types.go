@@ -28,6 +28,12 @@ type AccessAssignment struct {
 	CreatedAt    string   `json:"createdAt"`
 }
 
+type AccessibleResource struct {
+	ResourceID   string   `json:"resourceId"`
+	ResourceType string   `json:"resourceType"`
+	Roles        []string `json:"roles"`
+}
+
 type Application struct {
 	ApplicationID string            `json:"id"`
 	Name          string            `json:"name"`

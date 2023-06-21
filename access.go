@@ -72,16 +72,20 @@ func (c Cx1Client) CheckAccessToResourceByID(resourceId, resourceType, action st
 	return accessResponse.AccessGranted, err
 }
 
-func (c Cx1Client) CheckAccessibleResources(resourceTypes []string, action string) ([]AccessAssignment, error) {
-	var aas []AccessAssignment
+func (c Cx1Client) CheckAccessibleResources(resourceTypes []string, action string) (bool, []AccessibleResource, error) {
 	c.logger.Debugf("Checking current user accessible resources for action %v", action)
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/access-management/get-resources?resource-types=%v&action=%v", strings.Join(resourceTypes, ","), action), nil, nil)
-	if err != nil {
-		return aas, err
+	var responseStruct struct {
+		All       bool                 `json:"all"`
+		Resources []AccessibleResource `json:"resources"`
 	}
 
-	err = json.Unmarshal(response, &aas)
-	return aas, err
+	if err != nil {
+		return responseStruct.All, responseStruct.Resources, err
+	}
+
+	err = json.Unmarshal(response, &responseStruct)
+	return responseStruct.All, responseStruct.Resources, err
 }
 
 func (c Cx1Client) DeleteAccessAssignmentByID(entityId, resourceId string) error {
