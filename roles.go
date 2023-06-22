@@ -258,7 +258,7 @@ func (c Cx1Client) GetRoleByName(name string) (Role, error) {
 	if err == nil {
 		return role, nil
 	}
-	role, err = c.GetKeyCloakRoleByName(name)
+	role, err = c.GetIAMRoleByName(name)
 	if err == nil {
 		return role, nil
 	}
