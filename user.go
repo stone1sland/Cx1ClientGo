@@ -3,7 +3,13 @@ package Cx1ClientGo
 import "fmt"
 
 func (u User) String() string {
+	if u.FirstName == "" && u.LastName == "" && u.Email == "" {
+		return fmt.Sprintf("[%v] %v", ShortenGUID(u.UserID), u.UserName)
+	}
 	return fmt.Sprintf("[%v] %v %v (%v)", ShortenGUID(u.UserID), u.FirstName, u.LastName, u.Email)
+}
+func (u WhoAmI) String() string {
+	return fmt.Sprintf("[%v] %v", ShortenGUID(u.UserID), u.Name)
 }
 
 func (u User) HasRole(role *Role) bool {

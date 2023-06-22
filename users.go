@@ -28,6 +28,17 @@ func (c Cx1Client) GetCurrentUser() (User, error) {
 	return c.GetUserByID(whoami.UserID)
 }
 
+func (c Cx1Client) Whoami() (WhoAmI, error) {
+	var me WhoAmI
+	response, err := c.sendRequestOther(http.MethodGet, "/auth/admin", "/console/whoami", nil, nil)
+	if err != nil {
+		return me, err
+	}
+
+	err = json.Unmarshal(response, &me)
+	return me, err
+}
+
 func (c Cx1Client) GetUsers() ([]User, error) {
 	c.logger.Debug("Get Cx1 Users")
 
