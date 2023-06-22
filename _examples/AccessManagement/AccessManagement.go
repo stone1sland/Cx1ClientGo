@@ -58,6 +58,7 @@ func main() {
 	if err != nil {
 		logger.Errorf("Failed to add user assignment for cx1clientgo_test service user: %s", err)
 	} else {
+		logger.Info("Testing new OIDC Client by logging in as cx1clientgo_test")
 		testcx1client, err := Cx1ClientGo.NewOAuthClient(httpClient, base_url, iam_url, tenant, testclient.ClientID, testclient.ClientSecret, logger)
 		if err != nil {
 			logger.Errorf("Failed to log in as 'cx1clientgo_test' OIDC Client: %s", err)
@@ -74,6 +75,13 @@ func main() {
 }
 
 func checkCurrentUserAccess(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger) {
+	currentuser, err := cx1client.GetCurrentUser()
+	if err != nil {
+		logger.Errorf("Failed to get current user identity: %s", err)
+	}
+
+	logger.Infof("Currently logged in as: %v", currentuser.String())
+
 	allAccess, accessibleResources, err := cx1client.CheckAccessibleResources([]string{"tenant", "project", "application"}, "ast-scanner")
 	if err != nil {
 		logger.Errorf("Failed to check current user access assignments: %s", err)
