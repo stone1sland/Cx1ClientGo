@@ -391,6 +391,11 @@ type User struct {
 	Roles     []Role  `json:"-"` // only returned from regular /auth/realms/../user endpoint, as string IDs
 }
 
+type WhoAmI struct {
+	UserID string `json:"userId"`
+	Name   string `json:"displayName"`
+}
+
 type WorkflowLog struct {
 	Source    string `json:"Source"`
 	Info      string `json:"Info"`

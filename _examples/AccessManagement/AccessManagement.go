@@ -75,7 +75,7 @@ func main() {
 }
 
 func checkCurrentUserAccess(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger) {
-	currentuser, err := cx1client.GetCurrentUser()
+	currentuser, err := cx1client.Whoami()
 	if err != nil {
 		logger.Errorf("Failed to get current user identity: %s", err)
 	}
