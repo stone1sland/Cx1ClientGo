@@ -78,6 +78,13 @@ type AuditQueryMetadata struct {
 	Severity           uint
 }
 
+type DataImport struct {
+	MigrationId string   `json:"migrationId"`
+	Status      string   `json:"status"`
+	CreatedAt   string   `json:"createdAt"`
+	Logs        []string `json:"logs"`
+}
+
 type Group struct {
 	GroupID     string              `json:"id"`
 	Name        string              `json:"name"`
@@ -87,19 +94,19 @@ type Group struct {
 	Filled      bool                `json:"-"`
 }
 
-type DataImport struct {
-	MigrationId string   `json:"migrationId"`
-	Status      string   `json:"status"`
-	CreatedAt   string   `json:"createdAt"`
-	Logs        []string `json:"logs"`
-}
-
 type OIDCClient struct {
 	ID           string `json:"id"`
 	ClientID     string `json:"clientId"`
 	Enabled      bool   `json:"enabled"`
 	ClientSecret string `json:"secret"`
 	Creator      string `json:"-"`
+}
+
+type OIDCClientScope struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Protocol    string `json:"protocol"`
 }
 
 type Preset struct {

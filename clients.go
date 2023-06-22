@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
 )
 
-// Roles and Clients
+// Clients
 func (c Cx1Client) GetClients() ([]OIDCClient, error) {
 	c.logger.Debug("Getting OIDC Clients")
 	var clients []OIDCClient
@@ -45,11 +47,17 @@ func (c Cx1Client) CreateClient(name string) (OIDCClient, error) {
 	c.logger.Debugf("Creating OIDC client with name %v", name)
 
 	body := map[string]interface{}{
-		"enabled":      true,
-		"attributes":   map[string]interface{}{},
-		"redirectUris": []string{},
-		"clientId":     name,
-		"protocol":     "openid-connect",
+		"enabled": true,
+		"attributes": map[string]interface{}{
+			"lastUpdate": time.Now().UnixMilli(),
+		},
+		"redirectUris":           []string{},
+		"clientId":               name,
+		"protocol":               "openid-connect",
+		"frontchannelLogout":     true,
+		"publicClient":           false,
+		"serviceAccountsEnabled": true,
+		"standardFlowEnabled":    false,
 	}
 
 	jsonBody, _ := json.Marshal(body)
@@ -59,11 +67,32 @@ func (c Cx1Client) CreateClient(name string) (OIDCClient, error) {
 		return OIDCClient{}, err
 	}
 
-	return c.GetClientByName(name)
+	newClient, err := c.GetClientByName(name)
+	if err != nil {
+		return newClient, err
+	}
+
+	groupScope, err := c.GetClientScopeByName("groups")
+	if err != nil {
+		return newClient, fmt.Errorf("failed to get 'groups' client scope to add to new client: %s", err)
+	}
+
+	err = c.AddClientScopeByID(newClient.ID, groupScope.ID)
+	return newClient, err
+}
+
+func (c Cx1Client) AddClientScopeByID(oidcId, clientScopeId string) error {
+	c.logger.Debugf("Adding client scope %v to OIDC Client %v", clientScopeId, oidcId)
+
+	_, err := c.sendRequestIAM(http.MethodPut, "/auth/admin", fmt.Sprintf("/clients/%v/default-client-scopes/%v", oidcId, clientScopeId), nil, nil)
+	return err
 }
 
 func (c Cx1Client) DeleteClientByID(id string) error {
 	c.logger.Debugf("Deleting OIDC client with ID %v", id)
+	if strings.EqualFold(id, c.GetASTAppID()) {
+		return fmt.Errorf("attempt to delete the ast-app client (ID: %v) prevented - this will break your tenant", id)
+	}
 	_, err := c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/clients/%v", id), nil, nil)
 	return err
 }
@@ -113,6 +142,35 @@ func (c Cx1Client) GetTenantID() string {
 	}
 
 	return tenantID
+}
+
+func (c Cx1Client) GetClientScopes() ([]OIDCClientScope, error) {
+	c.logger.Debug("Getting OIDC Client Scopes")
+	var clientscopes []OIDCClientScope
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", "/client-scopes", nil, nil)
+	if err != nil {
+		return clientscopes, err
+	}
+
+	err = json.Unmarshal(response, &clientscopes)
+	c.logger.Tracef("Got %d client scopes", len(clientscopes))
+	return clientscopes, err
+}
+
+func (c Cx1Client) GetClientScopeByName(name string) (OIDCClientScope, error) {
+	clientScopes, err := c.GetClientScopes()
+	if err != nil {
+		return OIDCClientScope{}, err
+	}
+
+	for _, cs := range clientScopes {
+		if cs.Name == name {
+			return cs, nil
+		}
+	}
+
+	return OIDCClientScope{}, fmt.Errorf("client-scope %v not found", name)
 }
 
 // convenience function
