@@ -341,7 +341,7 @@ func (c Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]s
 		}
 
 		jsonBody, _ := json.Marshal(role_list)
-		_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ClientID), bytes.NewReader(jsonBody), http.Header{})
+		_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ID), bytes.NewReader(jsonBody), http.Header{})
 		if err != nil {
 			return fmt.Errorf("failed to remove roles from group %v: %s", g.String(), err)
 		}
@@ -376,7 +376,7 @@ func (c Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string
 		}
 
 		jsonBody, _ := json.Marshal(role_list)
-		_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ClientID), bytes.NewReader(jsonBody), http.Header{})
+		_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ID), bytes.NewReader(jsonBody), http.Header{})
 		if err != nil {
 			return fmt.Errorf("failed to remove roles from group %v: %s", g.String(), err)
 		}
