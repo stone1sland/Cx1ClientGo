@@ -204,7 +204,7 @@ func (c Cx1Client) UpdateGroup(g *Group) error {
 	return err
 }
 
-func (g *Group) AddRoleByID(client, new_role string) error {
+func (g *Group) AddRole(clientName, roleName string) error {
 	if !g.Filled {
 		return fmt.Errorf("group is not filled, first fetch the details via GetGroupByID")
 	}
@@ -213,45 +213,45 @@ func (g *Group) AddRoleByID(client, new_role string) error {
 		g.ClientRoles = make(map[string][]string)
 	}
 
-	_, ok := g.ClientRoles[client]
+	_, ok := g.ClientRoles[clientName]
 	if !ok {
-		g.ClientRoles[client] = make([]string, 0)
+		g.ClientRoles[clientName] = make([]string, 0)
 	}
 
-	for _, role := range g.ClientRoles[client] {
-		if strings.EqualFold(role, new_role) {
-			return fmt.Errorf("group already has role %v - %v", client, new_role)
+	for _, role := range g.ClientRoles[clientName] {
+		if strings.EqualFold(role, roleName) {
+			return fmt.Errorf("group already has role %v - %v", clientName, roleName)
 		}
 	}
 
-	g.ClientRoles[client] = append(g.ClientRoles[client], new_role)
+	g.ClientRoles[clientName] = append(g.ClientRoles[clientName], roleName)
 
 	return nil
 }
 
-func (g *Group) RemoveRoleByID(client, del_role string) error {
+func (g *Group) RemoveRole(clientName, roleName string) error {
 	if !g.Filled {
 		return fmt.Errorf("group %v is not filled, first fetch the details via GetGroupByID", g.String())
 	}
 
-	_, ok := g.ClientRoles[client]
+	_, ok := g.ClientRoles[clientName]
 	if !ok {
-		return fmt.Errorf("group %v does not have the %v client", g.String(), client)
+		return fmt.Errorf("group %v does not have the %v client", g.String(), clientName)
 	}
 
-	for id, role := range g.ClientRoles[client] {
-		if strings.EqualFold(role, del_role) {
-			return fmt.Errorf("group already has role %v - %v", client, del_role)
+	for id, role := range g.ClientRoles[clientName] {
+		if strings.EqualFold(role, roleName) {
+			return fmt.Errorf("group already has role %v - %v", clientName, roleName)
 		} else {
-			if id != len(g.ClientRoles[client])-1 {
-				g.ClientRoles[client][id] = g.ClientRoles[client][len(g.ClientRoles[client])-1]
+			if id != len(g.ClientRoles[clientName])-1 {
+				g.ClientRoles[clientName][id] = g.ClientRoles[clientName][len(g.ClientRoles[clientName])-1]
 			}
-			g.ClientRoles[client] = g.ClientRoles[client][:len(g.ClientRoles[client])-1]
+			g.ClientRoles[clientName] = g.ClientRoles[clientName][:len(g.ClientRoles[clientName])-1]
 			return nil
 		}
 	}
 
-	return fmt.Errorf("group %v does not have the %v - %v role", g.String(), client, del_role)
+	return fmt.Errorf("group %v does not have the %v - %v role", g.String(), clientName, roleName)
 }
 
 func (c Cx1Client) groupRoleChange(g *Group) error {
@@ -301,20 +301,23 @@ func (c Cx1Client) groupRoleChange(g *Group) error {
 		}
 	}
 
-	err = c.DeleteRolesFromGroupByID(g, del_roles)
+	err = c.DeleteRolesFromGroup(g, del_roles)
 	if err != nil {
 		return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
 	}
 
-	err = c.AddRolesToGroupByID(g, add_roles)
+	err = c.AddRolesToGroup(g, add_roles)
 	if err != nil {
-		return fmt.Errorf("failed to delete roles from group %v: %s", g.String(), err)
+		return fmt.Errorf("failed to add roles to group %v: %s", g.String(), err)
 	}
 
 	return nil
 }
 
-func (c Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]string) error {
+/*
+clientRoles map looks like: "ast-app" : { "ast-scanner", "ast-viewer" }
+*/
+func (c Cx1Client) DeleteRolesFromGroup(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -327,7 +330,7 @@ func (c Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]s
 			return fmt.Errorf("failed to retrieve client %v: %s", client, err)
 		}
 
-		client_role_set, err := c.GetRolesByClientID(kc_client.ClientID)
+		client_role_set, err := c.GetRolesByClientID(kc_client.ID)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve roles for client %v: %s", client, err)
 		}
@@ -341,7 +344,7 @@ func (c Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]s
 		}
 
 		jsonBody, _ := json.Marshal(role_list)
-		_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ClientID), bytes.NewReader(jsonBody), http.Header{})
+		_, err = c.sendRequestIAM(http.MethodDelete, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ID), bytes.NewReader(jsonBody), http.Header{})
 		if err != nil {
 			return fmt.Errorf("failed to remove roles from group %v: %s", g.String(), err)
 		}
@@ -349,7 +352,11 @@ func (c Cx1Client) DeleteRolesFromGroupByID(g *Group, clientRoles map[string][]s
 
 	return nil
 }
-func (c Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string) error {
+
+/*
+clientRoles map looks like: "ast-app" : { "ast-scanner", "ast-viewer" }
+*/
+func (c Cx1Client) AddRolesToGroup(g *Group, clientRoles map[string][]string) error {
 	type roleid struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -362,7 +369,7 @@ func (c Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string
 			return fmt.Errorf("failed to retrieve client %v: %s", client, err)
 		}
 
-		client_role_set, err := c.GetRolesByClientID(kc_client.ClientID)
+		client_role_set, err := c.GetRolesByClientID(kc_client.ID)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve roles for client %v: %s", client, err)
 		}
@@ -376,7 +383,7 @@ func (c Cx1Client) AddRolesToGroupByID(g *Group, clientRoles map[string][]string
 		}
 
 		jsonBody, _ := json.Marshal(role_list)
-		_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ClientID), bytes.NewReader(jsonBody), http.Header{})
+		_, err = c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/groups/%v/role-mappings/clients/%v", g.GroupID, kc_client.ID), bytes.NewReader(jsonBody), http.Header{})
 		if err != nil {
 			return fmt.Errorf("failed to remove roles from group %v: %s", g.String(), err)
 		}
