@@ -45,7 +45,7 @@ func (c Cx1Client) GetEntitiesAccessToResourceByID(resourceId, resourceType stri
 	return aas, err
 }
 
-func (c Cx1Client) GetResourcesAccessToEntityByID(entityId, entityType string, resourceTypes []string) ([]AccessAssignment, error) {
+func (c Cx1Client) GetResourcesAccessibleToEntityByID(entityId, entityType string, resourceTypes []string) ([]AccessAssignment, error) {
 	var aas []AccessAssignment
 	c.logger.Debugf("Getting the resources accessible to entity %v", entityId)
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/access-management/resources-for?entity-id=%v&entity-type=%v&resource-types=%v", entityId, entityType, strings.Join(resourceTypes, ",")), nil, nil)
