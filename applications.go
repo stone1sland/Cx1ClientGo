@@ -229,7 +229,7 @@ func (a *Application) AddRule(ruletype, value string) {
 		newrule.Value = value
 		a.Rules = append(a.Rules, newrule)
 	} else {
-		if rule.Value == value || strings.Contains(rule.Value, fmt.Sprintf(";%v;", value)) || rule.Value[len(rule.Value)-len(value)-1:] == fmt.Sprintf(";%v", value) || rule.Value[:len(value)+1] == fmt.Sprintf("%v;", value) {
+		if rule.Value == value || strings.Contains(fmt.Sprintf(";%v;", rule.Value), fmt.Sprintf(";%v;", value)) {
 			return // rule value already contains this value
 		}
 		rule.Value = fmt.Sprintf("%v;%v", rule.Value, value)
