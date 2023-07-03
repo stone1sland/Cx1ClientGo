@@ -610,7 +610,7 @@ func (q AuditQuery) CreateProjectOverrideByID(projectId string) AuditQuery {
 }
 func (q AuditQuery) CreateApplicationOverrideByID(applicationId string) AuditQuery {
 	new_query := q
-	new_query.Level = "Application"
+	new_query.Level = "Team"
 	new_query.LevelID = applicationId
 	return new_query
 }
