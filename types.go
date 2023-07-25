@@ -14,6 +14,7 @@ type Cx1Client struct {
 	iamUrl  string
 	tenant  string
 	logger  *logrus.Logger
+	flags   map[string]bool // initial implementation ignoring "payload" part of the flag
 }
 
 type AccessAssignment struct {
