@@ -20,10 +20,6 @@ var cxOrigin = "Cx1-Golang-Client"
 var astAppID string
 var tenantID string
 
-func init() {
-
-}
-
 // Main entry for users of this client:
 func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant string, client_id string, client_secret string, logger *logrus.Logger) (*Cx1Client, error) {
 	if base_url == "" || iam_url == "" || tenant == "" || client_id == "" || client_secret == "" || logger == nil {
@@ -42,10 +38,14 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 
 	oauthclient := conf.Client(ctx)
 
-	cli := Cx1Client{oauthclient, base_url, iam_url, tenant, logger}
+	cli := Cx1Client{
+		httpClient: oauthclient,
+		baseUrl:    base_url,
+		iamUrl:     iam_url,
+		tenant:     tenant,
+		logger:     logger}
 
-	_ = cli.GetTenantID()
-	_ = cli.GetASTAppID()
+	cli.InitializeClient()
 
 	return &cli, nil
 }
@@ -76,10 +76,14 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 
 	oauthclient := conf.Client(ctx, token)
 
-	cli := Cx1Client{oauthclient, base_url, iam_url, tenant, logger}
+	cli := Cx1Client{
+		httpClient: oauthclient,
+		baseUrl:    base_url,
+		iamUrl:     iam_url,
+		tenant:     tenant,
+		logger:     logger}
 
-	_ = cli.GetTenantID()
-	_ = cli.GetASTAppID()
+	cli.InitializeClient()
 
 	return &cli, nil
 }
@@ -229,4 +233,57 @@ func (c Cx1Client) recordRequestDetailsInErrorCase(requestBody []byte, responseB
 
 func (c Cx1Client) String() string {
 	return fmt.Sprintf("%v on %v ", c.tenant, c.baseUrl)
+}
+
+func (c *Cx1Client) InitializeClient() {
+	_ = c.GetTenantID()
+	_ = c.GetASTAppID()
+
+	err := c.RefreshFlags()
+	if err != nil {
+		c.logger.Warnf("Failed to get tenant flags: %s", err)
+	}
+}
+
+func (c *Cx1Client) RefreshFlags() error {
+	var flags map[string]bool = make(map[string]bool, 0)
+
+	c.logger.Debug("Get Cx1 tenant flags")
+	var FlagResponse []struct {
+		Name   string `json:"name"`
+		Status bool   `json:"status"`
+		// Payload interface{} `json:"payload"` // ignoring the payload for now
+	}
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/flags?filter=%v", tenantID), nil, nil)
+
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(response, &FlagResponse)
+	if err != nil {
+		return err
+	}
+
+	for _, fr := range FlagResponse {
+		flags[fr.Name] = fr.Status
+	}
+
+	c.flags = flags
+
+	return nil
+}
+
+func (c Cx1Client) GetFlags() map[string]bool {
+	return c.flags
+}
+
+func (c Cx1Client) CheckFlag(flag string) (bool, error) {
+	setting, ok := c.flags[flag]
+	if !ok {
+		return false, fmt.Errorf("no such flag: %v", flag)
+	}
+
+	return setting, nil
 }
