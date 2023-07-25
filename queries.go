@@ -103,12 +103,13 @@ func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query stri
 	_, err := c.sendRequest(http.MethodDelete, fmt.Sprintf("/cx-audit/queries/%v/%v.cs", levelID, path), nil, nil)
 	if err != nil {
 		// currently there's a bug where the response can be error 500 even if it succeeded.
-		queries, err2 := c.GetQueriesByLevelID(level, levelID)
+
+		q, err2 := c.GetQueryByName(levelID, language, group, query)
 		if err2 != nil {
 			return fmt.Errorf("error while deleting query (%s) followed by error while checking if the query was deleted (%s)", err, err2)
 		}
-		q, err2 := FindQueryByName(queries, level, language, group, query)
-		if err2 != nil {
+
+		if q.Level != level {
 			c.logger.Warnf("While deleting the query an error was returned (%s) but the query was deleted", err)
 			return nil
 		} else {
