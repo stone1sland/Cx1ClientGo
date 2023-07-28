@@ -15,6 +15,18 @@ type Cx1Client struct {
 	tenant  string
 	logger  *logrus.Logger
 	flags   map[string]bool // initial implementation ignoring "payload" part of the flag
+	consts  ClientVars
+}
+
+type ClientVars struct {
+	MigrationPollingMaxSeconds   int
+	MigrationPollingDelaySeconds int
+	EnginePollingMaxSeconds      int
+	EnginePollingDelaySeconds    int
+	ScanPollingMaxSeconds        int
+	ScanPollingDelaySeconds      int
+	LanguagePollingMaxSeconds    int
+	LanguagePollingDelaySeconds  int
 }
 
 type AccessAssignment struct {

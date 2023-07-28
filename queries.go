@@ -10,11 +10,9 @@ import (
 	"time"
 )
 
-const (
-	enginePollingCountMax   = 20
-	scanPollingCountMax     = 40
-	languagePollingCountMax = 20
-)
+//	enginePollingCountMax   = 20
+//	scanPollingCountMax     = 40
+//	languagePollingCountMax = 20
 
 func (c Cx1Client) GetQueryByID(qid uint64) (Query, error) {
 	return Query{}, fmt.Errorf("this API call no longer exists")
@@ -191,7 +189,7 @@ func (c Cx1Client) AuditFindSessionsByID(projectId, scanId string) (bool, []stri
 	return responseStruct.Available, sessions, nil
 }
 
-func (c Cx1Client) auditGetEngineStatusByID(auditSessionId string) (bool, error) {
+func (c Cx1Client) AuditGetEngineStatusByID(auditSessionId string) (bool, error) {
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/sessions/%v/sast-status", auditSessionId), nil, nil)
 	if err != nil {
 		return false, err
@@ -225,19 +223,19 @@ func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
 	pollingCounter := 0
 
 	for !status {
-		status, err = c.auditGetEngineStatusByID(auditSessionId)
+		status, err = c.AuditGetEngineStatusByID(auditSessionId)
 		if err != nil {
 			return err
 		}
-		pollingCounter++
-		if pollingCounter > enginePollingCountMax {
-			return fmt.Errorf("audit engine polled %d times without success: session may no longer be valid", pollingCounter)
+		pollingCounter += c.consts.EnginePollingDelaySeconds
+		if pollingCounter > c.consts.EnginePollingMaxSeconds {
+			return fmt.Errorf("audit engine polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
 		}
 
 		if status {
 			return nil
 		}
-		time.Sleep(15 * time.Second)
+		time.Sleep(time.Duration(c.consts.EnginePollingDelaySeconds) * time.Second)
 	}
 
 	return nil
@@ -265,7 +263,7 @@ func (c Cx1Client) AuditCheckLanguagesByID(auditSessionId string) error {
 	return fmt.Errorf("error: %v", responseStruct.Message)
 }
 
-func (c Cx1Client) auditGetLanguagesByID(auditSessionId string) ([]string, error) {
+func (c Cx1Client) AuditGetLanguagesByID(auditSessionId string) ([]string, error) {
 	var languageResponse struct {
 		Completed bool     `json:"completed"`
 		Value     []string `json:"value"`
@@ -297,21 +295,21 @@ func (c Cx1Client) AuditLanguagePollingByID(auditSessionId string) ([]string, er
 	var err error
 	pollingCounter := 0
 	for len(languages) == 0 {
-		languages, err = c.auditGetLanguagesByID(auditSessionId)
+		languages, err = c.AuditGetLanguagesByID(auditSessionId)
 		if err != nil {
 			return languages, err
 		}
 
-		pollingCounter++
-		if pollingCounter > languagePollingCountMax {
-			return languages, fmt.Errorf("audit languages polled %d times without success: session may no longer be valid", pollingCounter)
+		pollingCounter += c.consts.LanguagePollingDelaySeconds
+		if pollingCounter > c.consts.LanguagePollingMaxSeconds {
+			return languages, fmt.Errorf("audit languages polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
 		}
 
 		if len(languages) > 0 {
 			return languages, nil
 		}
 
-		time.Sleep(15 * time.Second)
+		time.Sleep(time.Duration(c.consts.LanguagePollingDelaySeconds) * time.Second)
 	}
 
 	return languages, fmt.Errorf("unknown error")
@@ -339,7 +337,7 @@ func (c Cx1Client) AuditRunScanByID(auditSessionId string) error {
 	return fmt.Errorf("error: %v", responseStruct.Message)
 }
 
-func (c Cx1Client) auditGetScanStatusByID(auditSessionId string) (bool, error) {
+func (c Cx1Client) AuditGetScanStatusByID(auditSessionId string) (bool, error) {
 	var scanResponse struct {
 		Completed bool     `json:"completed"`
 		Value     []string `json:"value"`
@@ -371,19 +369,19 @@ func (c Cx1Client) AuditScanPollingByID(auditSessionId string) error {
 	var err error
 	pollingCounter := 0
 	for !status {
-		status, err = c.auditGetScanStatusByID(auditSessionId)
+		status, err = c.AuditGetScanStatusByID(auditSessionId)
 		if err != nil {
 			return err
 		}
-		pollingCounter++
-		if pollingCounter > scanPollingCountMax {
-			return fmt.Errorf("audit scan polled %d times without success: session may no longer be valid", pollingCounter)
+		pollingCounter += c.consts.ScanPollingDelaySeconds
+		if pollingCounter > c.consts.ScanPollingMaxSeconds {
+			return fmt.Errorf("audit scan polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
 		}
 		if status {
 			return nil
 		}
 
-		time.Sleep(15 * time.Second)
+		time.Sleep(time.Duration(c.consts.ScanPollingDelaySeconds) * time.Second)
 	}
 
 	return fmt.Errorf("unknown error")
