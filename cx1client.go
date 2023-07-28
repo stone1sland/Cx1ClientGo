@@ -243,6 +243,15 @@ func (c *Cx1Client) InitializeClient() {
 	if err != nil {
 		c.logger.Warnf("Failed to get tenant flags: %s", err)
 	}
+
+	c.consts.MigrationPollingMaxSeconds = 20 * 15
+	c.consts.MigrationPollingDelaySeconds = 15
+	c.consts.EnginePollingMaxSeconds = 20 * 15
+	c.consts.EnginePollingDelaySeconds = 15
+	c.consts.ScanPollingMaxSeconds = 40 * 15
+	c.consts.ScanPollingDelaySeconds = 15
+	c.consts.LanguagePollingMaxSeconds = 20 * 15
+	c.consts.LanguagePollingDelaySeconds = 15
 }
 
 func (c *Cx1Client) RefreshFlags() error {
@@ -286,4 +295,13 @@ func (c Cx1Client) CheckFlag(flag string) (bool, error) {
 	}
 
 	return setting, nil
+}
+
+func (c Cx1Client) GetClientVars() ClientVars {
+	c.logger.Info("Retrieving client vars - polling limits set in seconds")
+	return c.consts
+}
+
+func (c *Cx1Client) SetClientVars(clientvars ClientVars) {
+	c.consts = clientvars
 }
