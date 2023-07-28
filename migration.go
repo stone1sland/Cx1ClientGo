@@ -9,9 +9,7 @@ import (
 	"time"
 )
 
-const (
-	MigrationPollingMax = 20
-)
+//var MigrationPollingMax int = 20
 
 func (c Cx1Client) StartMigration(dataArchive, projectMapping []byte, encryptionKey string) (string, error) {
 	dataUrl, err := c.UploadBytes(&dataArchive)
@@ -106,11 +104,11 @@ func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
 		case "partial":
 			return status.Status, nil
 		}
-		counter++
-		if counter >= MigrationPollingMax {
-			return "timeout", fmt.Errorf("import polling reached max count %d, aborting", counter)
+		counter += c.consts.MigrationPollingDelaySeconds
+		if counter >= c.consts.MigrationPollingMaxSeconds {
+			return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", counter)
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(time.Duration(c.consts.MigrationPollingDelaySeconds) * time.Second)
 	}
 }
 
