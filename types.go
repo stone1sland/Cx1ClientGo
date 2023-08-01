@@ -92,10 +92,18 @@ type AuditQueryMetadata struct {
 }
 
 type DataImport struct {
-	MigrationId string   `json:"migrationId"`
-	Status      string   `json:"status"`
-	CreatedAt   string   `json:"createdAt"`
-	Logs        []string `json:"logs"`
+	MigrationId string             `json:"migrationId"`
+	Status      string             `json:"status"`
+	CreatedAt   string             `json:"createdAt"`
+	Logs        []DataImportStatus `json:"logs"`
+}
+
+type DataImportStatus struct {
+	Level   string `json:"level"`
+	Message string `json:"msg"`
+	Error   string `json:"error"`
+	Worker  string `json:"worker"`
+	RawLog  string `json:"raw_log"`
 }
 
 type Group struct {

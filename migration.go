@@ -20,16 +20,14 @@ func (c Cx1Client) StartMigration(dataArchive, projectMapping []byte, encryption
 	c.logger.Debugf("Uploaded data archive to %v", dataUrl)
 	dataFilename := getFilenameFromURL(dataUrl)
 
-	mappingFilename := ""
+	mappingUrl, err := c.UploadBytes(&projectMapping)
+	mappingFilename := getFilenameFromURL(mappingUrl)
 	if len(projectMapping) != 0 {
-		mappingUrl, err := c.UploadBytes(&projectMapping)
 		if err != nil {
 			return "", fmt.Errorf("error uploading project mapping data: %s", err)
 		}
 
 		c.logger.Debugf("Uploaded project mapping to %v", mappingUrl)
-
-		mappingFilename = getFilenameFromURL(mappingUrl)
 	}
 
 	return c.StartImport(dataFilename, mappingFilename, encryptionKey)
@@ -98,7 +96,7 @@ func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
 
 		switch status.Status {
 		case "failed":
-			return status.Status, fmt.Errorf("import failed: %s", status.Status)
+			return status.Status, fmt.Errorf("import failed: %s", status.Logs)
 		case "completed":
 			return status.Status, nil
 		case "partial":
