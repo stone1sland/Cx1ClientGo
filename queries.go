@@ -104,7 +104,8 @@ func (c Cx1Client) DeleteQueryByName(level, levelID, language, group, query stri
 
 		q, err2 := c.GetQueryByName(levelID, language, group, query)
 		if err2 != nil {
-			return fmt.Errorf("error while deleting query (%s) followed by error while checking if the query was deleted (%s)", err, err2)
+			c.logger.Warnf("error while deleting query (%s) followed by error while checking if the query was deleted (%s) - assuming the query was deleted", err, err2)
+			return nil
 		}
 
 		if q.Level != level {
