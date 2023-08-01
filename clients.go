@@ -43,13 +43,15 @@ func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
 	return client, fmt.Errorf("no such client %v found", clientName)
 }
 
-func (c Cx1Client) CreateClient(name string) (OIDCClient, error) {
+func (c Cx1Client) CreateClient(name, notificationEmail string, secretExpiration int) (OIDCClient, error) {
 	c.logger.Debugf("Creating OIDC client with name %v", name)
 
 	body := map[string]interface{}{
 		"enabled": true,
 		"attributes": map[string]interface{}{
-			"lastUpdate": time.Now().UnixMilli(),
+			"lastUpdate":        time.Now().UnixMilli(),
+			"notificationEmail": notificationEmail,
+			"secretExpiration":  fmt.Sprintf("%d", secretExpiration),
 		},
 		"redirectUris":           []string{},
 		"clientId":               name,
