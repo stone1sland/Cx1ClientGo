@@ -24,6 +24,19 @@ func (c Cx1Client) GetClients() ([]OIDCClient, error) {
 	return clients, err
 }
 
+func (c Cx1Client) GetClientByID(id string) (OIDCClient, error) {
+	c.logger.Debugf("Getting OIDC client with ID %v", id)
+	var client OIDCClient
+
+	response, err := c.sendRequestIAM(http.MethodGet, "/auth/admin", fmt.Sprintf("/clients/%v", id), nil, nil)
+	if err != nil {
+		return client, err
+	}
+
+	err = json.Unmarshal(response, &client)
+	return client, err
+}
+
 func (c Cx1Client) GetClientByName(clientName string) (OIDCClient, error) {
 	c.logger.Debugf("Getting OIDC client with name %v", clientName)
 
