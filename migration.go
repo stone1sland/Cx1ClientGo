@@ -20,9 +20,11 @@ func (c Cx1Client) StartMigration(dataArchive, projectMapping []byte, encryption
 	c.logger.Debugf("Uploaded data archive to %v", dataUrl)
 	dataFilename := getFilenameFromURL(dataUrl)
 
-	mappingUrl, err := c.UploadBytes(&projectMapping)
-	mappingFilename := getFilenameFromURL(mappingUrl)
+	mappingFilename := ""
 	if len(projectMapping) != 0 {
+
+		mappingUrl, err := c.UploadBytes(&projectMapping)
+		mappingFilename = getFilenameFromURL(mappingUrl)
 		if err != nil {
 			return "", fmt.Errorf("error uploading project mapping data: %s", err)
 		}
