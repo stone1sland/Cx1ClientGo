@@ -58,6 +58,7 @@ type Application struct {
 	Criticality   uint              `json:"criticality"`
 	Rules         []ApplicationRule `json:"rules"`
 	Tags          map[string]string `json:"tags"`
+	ProjectIds    []string          `json:"projectIds"`
 	CreatedAt     string            `json:"createdAt"`
 	UpdatedAt     string            `json:"updatedAt"`
 }
