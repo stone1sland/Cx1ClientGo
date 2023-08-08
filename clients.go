@@ -206,3 +206,30 @@ func (c Cx1Client) GetASTAppID() string {
 
 	return astAppID
 }
+
+func (c Cx1Client) RegenerateClientSecret(client OIDCClient) (string, error) {
+	clientId := client.ID
+	body := map[string]interface{}{
+		"realm":  c.tenant,
+		"client": clientId,
+	}
+
+	type RespBody struct {
+		Type  string
+		Value string
+	}
+	var secretResponse RespBody
+
+	jsonBody, _ := json.Marshal(body)
+
+	response, err := c.sendRequestIAM(http.MethodPost, "/auth/admin", fmt.Sprintf("/clients/%s/client-secret", clientId), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		return "", err
+	}
+	err = json.Unmarshal(response, &secretResponse)
+	if err != nil {
+		return "", err
+	}
+
+	return secretResponse.Value, nil
+}
