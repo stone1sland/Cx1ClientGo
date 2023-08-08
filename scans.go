@@ -244,11 +244,16 @@ func (s *Scan) IsIncremental() (bool, error) {
 
 // convenience
 func (c Cx1Client) ScanPolling(s *Scan) (Scan, error) {
+	return c.ScanPollingWithTimeout(s, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
+}
+
+func (c Cx1Client) ScanPollingWithTimeout(s *Scan, delaySeconds, maxSeconds int) (Scan, error) {
 	c.logger.Infof("Polling status of scan %v", s.ScanID)
+	pollingCounter := 0
+
 	var err error
 	scan := *s
 	for scan.Status == "Running" {
-		time.Sleep(10 * time.Second)
 		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
 			c.logger.Tracef("Failed to get scan status: %s", err)
@@ -258,15 +263,27 @@ func (c Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 		if scan.Status != "Running" {
 			break
 		}
+		pollingCounter += delaySeconds
+		if maxSeconds != 0 && pollingCounter >= maxSeconds {
+			return scan, fmt.Errorf("scan polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
+		}
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
+
 	}
 	return scan, nil
 }
+
 func (c Cx1Client) ScanPollingDetailed(s *Scan) (Scan, error) {
+	return c.ScanPollingDetailedWithTimeout(s, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
+}
+
+func (c Cx1Client) ScanPollingDetailedWithTimeout(s *Scan, delaySeconds, maxSeconds int) (Scan, error) {
 	c.logger.Infof("Polling status of scan %v", s.ScanID)
+
+	pollingCounter := 0
 	var err error
 	scan := *s
 	for scan.Status == "Running" {
-		time.Sleep(10 * time.Second)
 		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
 			c.logger.Tracef("Failed to get scan status: %s", err)
@@ -285,6 +302,12 @@ func (c Cx1Client) ScanPollingDetailed(s *Scan) (Scan, error) {
 		if scan.Status != "Running" {
 			break
 		}
+
+		pollingCounter += delaySeconds
+		if maxSeconds != 0 && pollingCounter >= maxSeconds {
+			return scan, fmt.Errorf("scan polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
+		}
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
 	}
 	return scan, nil
 }

@@ -246,12 +246,21 @@ func (c *Cx1Client) InitializeClient() {
 
 	c.consts.MigrationPollingMaxSeconds = 20 * 15
 	c.consts.MigrationPollingDelaySeconds = 15
-	c.consts.EnginePollingMaxSeconds = 20 * 15
-	c.consts.EnginePollingDelaySeconds = 15
-	c.consts.ScanPollingMaxSeconds = 40 * 15
+
+	c.consts.AuditEnginePollingMaxSeconds = 20 * 15
+	c.consts.AuditEnginePollingDelaySeconds = 15
+
+	c.consts.AuditScanPollingMaxSeconds = 40 * 15
+	c.consts.AuditScanPollingDelaySeconds = 15
+
+	c.consts.AuditLanguagePollingMaxSeconds = 20 * 15
+	c.consts.AuditLanguagePollingDelaySeconds = 15
+
+	c.consts.AuditCompilePollingMaxSeconds = 40 * 15
+	c.consts.AuditCompilePollingDelaySeconds = 15
+
+	c.consts.ScanPollingMaxSeconds = 0
 	c.consts.ScanPollingDelaySeconds = 15
-	c.consts.LanguagePollingMaxSeconds = 20 * 15
-	c.consts.LanguagePollingDelaySeconds = 15
 }
 
 func (c *Cx1Client) RefreshFlags() error {
