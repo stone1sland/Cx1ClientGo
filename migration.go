@@ -89,7 +89,11 @@ func (c Cx1Client) GetImportLogsByID(importID, engine string) ([]byte, error) {
 }
 
 func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
-	counter := 0
+	return c.ImportPollingByIDWithTimeout(importID, c.consts.MigrationPollingDelaySeconds, c.consts.MigrationPollingMaxSeconds)
+}
+
+func (c Cx1Client) ImportPollingByIDWithTimeout(importID string, delaySeconds, maxSeconds int) (string, error) {
+	pollingCounter := 0
 	for {
 		status, err := c.GetImportByID(importID)
 		if err != nil {
@@ -104,11 +108,11 @@ func (c Cx1Client) ImportPollingByID(importID string) (string, error) {
 		case "partial":
 			return status.Status, nil
 		}
-		counter += c.consts.MigrationPollingDelaySeconds
-		if counter >= c.consts.MigrationPollingMaxSeconds {
-			return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", counter)
+		pollingCounter += delaySeconds
+		if maxSeconds != 0 && pollingCounter >= maxSeconds {
+			return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
 		}
-		time.Sleep(time.Duration(c.consts.MigrationPollingDelaySeconds) * time.Second)
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
 	}
 }
 
