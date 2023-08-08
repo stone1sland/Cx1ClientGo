@@ -256,6 +256,9 @@ func (c *Cx1Client) InitializeClient() {
 	c.consts.AuditLanguagePollingMaxSeconds = 20 * 15
 	c.consts.AuditLanguagePollingDelaySeconds = 15
 
+	c.consts.AuditCompilePollingMaxSeconds = 40 * 15
+	c.consts.AuditCompilePollingDelaySeconds = 15
+
 	c.consts.ScanPollingMaxSeconds = 0
 	c.consts.ScanPollingDelaySeconds = 15
 }

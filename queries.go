@@ -587,10 +587,15 @@ func (c Cx1Client) auditGetCompileStatusByID(sessionId string) (bool, error) {
 }
 
 func (c Cx1Client) AuditCompilePollingByID(auditSessionId string) error {
+	return c.AuditCompilePollingByIDWithTimeout(auditSessionId, c.consts.AuditCompilePollingDelaySeconds, c.consts.AuditCompilePollingMaxSeconds)
+}
+
+func (c Cx1Client) AuditCompilePollingByIDWithTimeout(auditSessionId string, delaySeconds, maxSeconds int) error {
 	c.logger.Infof("Polling status of compilation for audit session %v", auditSessionId)
 	status := false
 	var err error
 
+	pollingCounter := 0
 	for !status {
 		status, err = c.auditGetCompileStatusByID(auditSessionId)
 		if err != nil {
@@ -599,7 +604,16 @@ func (c Cx1Client) AuditCompilePollingByID(auditSessionId string) error {
 		if status {
 			return nil
 		}
-		time.Sleep(15 * time.Second)
+
+		pollingCounter += delaySeconds
+		if maxSeconds != 0 && pollingCounter >= maxSeconds {
+			return fmt.Errorf("audit query compilation polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
+		}
+		if status {
+			return nil
+		}
+
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
 	}
 	return fmt.Errorf("unknown error")
 }
