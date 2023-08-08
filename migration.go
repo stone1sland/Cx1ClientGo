@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-//var MigrationPollingMax int = 20
-
 func (c Cx1Client) StartMigration(dataArchive, projectMapping []byte, encryptionKey string) (string, error) {
 	dataUrl, err := c.UploadBytes(&dataArchive)
 	if err != nil {

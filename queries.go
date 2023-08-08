@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-//	enginePollingCountMax   = 20
-//	scanPollingCountMax     = 40
-//	languagePollingCountMax = 20
-
 func (c Cx1Client) GetQueryByID(qid uint64) (Query, error) {
 	return Query{}, fmt.Errorf("this API call no longer exists")
 	/*
@@ -218,7 +214,7 @@ func (c Cx1Client) AuditGetEngineStatusByID(auditSessionId string) (bool, error)
 }
 
 func (c Cx1Client) AuditEnginePollingByID(auditSessionId string) error {
-	return c.AuditEnginePollingByIDWithTimeout(auditSessionId, c.consts.EnginePollingDelaySeconds, c.consts.EnginePollingMaxSeconds)
+	return c.AuditEnginePollingByIDWithTimeout(auditSessionId, c.consts.AuditEnginePollingDelaySeconds, c.consts.AuditEnginePollingMaxSeconds)
 }
 
 func (c Cx1Client) AuditEnginePollingByIDWithTimeout(auditSessionId string, delaySeconds, maxSeconds int) error {
@@ -295,7 +291,7 @@ func (c Cx1Client) AuditGetLanguagesByID(auditSessionId string) ([]string, error
 }
 
 func (c Cx1Client) AuditLanguagePollingByID(auditSessionId string) ([]string, error) {
-	return c.AuditLanguagePollingByIDWithTimeout(auditSessionId, c.consts.LanguagePollingDelaySeconds, c.consts.LanguagePollingMaxSeconds)
+	return c.AuditLanguagePollingByIDWithTimeout(auditSessionId, c.consts.AuditLanguagePollingDelaySeconds, c.consts.AuditLanguagePollingMaxSeconds)
 }
 
 func (c Cx1Client) AuditLanguagePollingByIDWithTimeout(auditSessionId string, delaySeconds, maxSeconds int) ([]string, error) {
@@ -373,7 +369,7 @@ func (c Cx1Client) AuditGetScanStatusByID(auditSessionId string) (bool, error) {
 }
 
 func (c Cx1Client) AuditScanPollingByID(auditSessionId string) error {
-	return c.AuditScanPollingByIDWithTimeout(auditSessionId, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
+	return c.AuditScanPollingByIDWithTimeout(auditSessionId, c.consts.AuditScanPollingDelaySeconds, c.consts.AuditScanPollingMaxSeconds)
 }
 
 func (c Cx1Client) AuditScanPollingByIDWithTimeout(auditSessionId string, delaySeconds, maxSeconds int) error {
