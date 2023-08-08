@@ -159,6 +159,10 @@ func (c Cx1Client) GetTenantID() string {
 	return tenantID
 }
 
+func (c Cx1Client) GetTenantName() string {
+	return c.tenant
+}
+
 func (c Cx1Client) GetClientScopes() ([]OIDCClientScope, error) {
 	c.logger.Debug("Getting OIDC Client Scopes")
 	var clientscopes []OIDCClientScope
