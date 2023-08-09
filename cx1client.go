@@ -307,7 +307,7 @@ func (c Cx1Client) CheckFlag(flag string) (bool, error) {
 }
 
 func (c Cx1Client) GetClientVars() ClientVars {
-	c.logger.Info("Retrieving client vars - polling limits set in seconds")
+	c.logger.Debug("Retrieving client vars - polling limits set in seconds")
 	return c.consts
 }
 
