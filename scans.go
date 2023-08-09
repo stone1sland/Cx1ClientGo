@@ -244,16 +244,17 @@ func (s *Scan) IsIncremental() (bool, error) {
 
 // convenience
 func (c Cx1Client) ScanPolling(s *Scan) (Scan, error) {
-	return c.ScanPollingWithTimeout(s, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
+	return c.ScanPollingWithTimeout(s, false, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
 }
 
+/*
 func (c Cx1Client) ScanPollingWithTimeout(s *Scan, delaySeconds, maxSeconds int) (Scan, error) {
 	c.logger.Infof("Polling status of scan %v", s.ScanID)
 	pollingCounter := 0
 
 	var err error
 	scan := *s
-	for scan.Status == "Running" {
+	for !(scan.Status == "Failed" || scan.Status == "Partial" || scan.Status == "Completed" || scan.Status == "Canceled") {
 		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
 			c.logger.Tracef("Failed to get scan status: %s", err)
@@ -272,34 +273,39 @@ func (c Cx1Client) ScanPollingWithTimeout(s *Scan, delaySeconds, maxSeconds int)
 	}
 	return scan, nil
 }
+*/
 
 func (c Cx1Client) ScanPollingDetailed(s *Scan) (Scan, error) {
-	return c.ScanPollingDetailedWithTimeout(s, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
+	return c.ScanPollingWithTimeout(s, true, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
 }
 
-func (c Cx1Client) ScanPollingDetailedWithTimeout(s *Scan, delaySeconds, maxSeconds int) (Scan, error) {
+func (c Cx1Client) ScanPollingWithTimeout(s *Scan, detailed bool, delaySeconds, maxSeconds int) (Scan, error) {
 	c.logger.Infof("Polling status of scan %v", s.ScanID)
 
 	pollingCounter := 0
 	var err error
 	scan := *s
-	for scan.Status == "Running" {
+	for !(scan.Status == "Failed" || scan.Status == "Partial" || scan.Status == "Completed" || scan.Status == "Canceled") { // scan is queueing or running
 		scan, err = c.GetScanByID(scan.ScanID)
 		if err != nil {
 			c.logger.Tracef("Failed to get scan status: %s", err)
 			return scan, err
 		}
-		workflow, err := c.GetScanWorkflowByID(scan.ScanID)
-		if err != nil {
-			c.logger.Tracef("Failed to get scan workflow: %s", err)
-			return scan, err
+		if detailed {
+			workflow, err := c.GetScanWorkflowByID(scan.ScanID)
+			if err != nil {
+				c.logger.Tracef("Failed to get scan workflow: %s", err)
+				return scan, err
+			}
+			status := "no details"
+			if len(workflow) > 0 {
+				status = workflow[len(workflow)-1].Info
+			}
+			c.logger.Infof(" - %v: %v", scan.Status, status)
+		} else {
+			c.logger.Infof(" - %v", scan.Status)
 		}
-		status := "no details"
-		if len(workflow) > 0 {
-			status = workflow[len(workflow)-1].Info
-		}
-		c.logger.Infof(" - %v: %v", scan.Status, status)
-		if scan.Status != "Running" {
+		if scan.Status == "Failed" || scan.Status == "Partial" || scan.Status == "Completed" || scan.Status == "Canceled" {
 			break
 		}
 
