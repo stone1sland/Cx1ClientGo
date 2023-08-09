@@ -247,34 +247,6 @@ func (c Cx1Client) ScanPolling(s *Scan) (Scan, error) {
 	return c.ScanPollingWithTimeout(s, false, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
 }
 
-/*
-func (c Cx1Client) ScanPollingWithTimeout(s *Scan, delaySeconds, maxSeconds int) (Scan, error) {
-	c.logger.Infof("Polling status of scan %v", s.ScanID)
-	pollingCounter := 0
-
-	var err error
-	scan := *s
-	for !(scan.Status == "Failed" || scan.Status == "Partial" || scan.Status == "Completed" || scan.Status == "Canceled") {
-		scan, err = c.GetScanByID(scan.ScanID)
-		if err != nil {
-			c.logger.Tracef("Failed to get scan status: %s", err)
-			return scan, err
-		}
-		c.logger.Infof(" - %v", scan.Status)
-		if scan.Status != "Running" {
-			break
-		}
-		pollingCounter += delaySeconds
-		if maxSeconds != 0 && pollingCounter >= maxSeconds {
-			return scan, fmt.Errorf("scan polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
-		}
-		time.Sleep(time.Duration(delaySeconds) * time.Second)
-
-	}
-	return scan, nil
-}
-*/
-
 func (c Cx1Client) ScanPollingDetailed(s *Scan) (Scan, error) {
 	return c.ScanPollingWithTimeout(s, true, c.consts.ScanPollingDelaySeconds, c.consts.ScanPollingMaxSeconds)
 }
