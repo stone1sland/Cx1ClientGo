@@ -55,6 +55,37 @@ func (c Cx1Client) GetScanMetadataByID(scanID string) (ScanMetadata, error) {
 	return scanmeta, nil
 }
 
+func (c Cx1Client) GetLastScansByStatus(status []string) ([]Scan, error) {
+	scanFilter := ScanFilter{
+		Statuses: status,
+	}
+	return c.GetLastScansFiltered(scanFilter)
+}
+
+func (c Cx1Client) GetLastScansFiltered(filter ScanFilter) ([]Scan, error) {
+	var scanResponse struct {
+		TotalCount         uint64
+		FilteredTotalCount uint64
+		Scans              []Scan
+	}
+
+	query := url.Values{
+		"sort": {"+created_at"},
+	}
+
+	filter.AddURLValues(&query)
+
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", query.Encode()), nil, nil)
+	if err != nil {
+		err = fmt.Errorf("failed to fetch scans matching filter %v: %s", query, err)
+		c.logger.Tracef("Error: %s", err)
+		return scanResponse.Scans, err
+	}
+
+	err = json.Unmarshal(data, &scanResponse)
+	return scanResponse.Scans, err
+}
+
 func (s *ScanSummary) TotalCount() uint64 {
 	var count uint64
 	count = 0
