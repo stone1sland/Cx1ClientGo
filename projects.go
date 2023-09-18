@@ -319,34 +319,12 @@ func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverr
 	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
 }
 
-// GetScans returns all scan status on the project addressed by projectID
-func (c Cx1Client) GetLastScans(projectID string, limit int) ([]Scan, error) {
-	c.depwarn("GetLastScans", "GetLastScansByID")
-	return c.GetLastScansByID(projectID, limit)
-}
-
 func (c Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error) {
-	var scanResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-		Scans              []Scan
+	scanFilter := ScanFilter{
+		ProjectID: projectID,
+		Limit:     limit,
 	}
-
-	body := url.Values{
-		"project-id": {projectID},
-		"offset":     {fmt.Sprintf("%d", 0)},
-		"limit":      {fmt.Sprintf("%d", limit)},
-		"sort":       {"+created_at"},
-	}
-
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil)
-	if err != nil {
-		c.logger.Tracef("Failed to fetch scans of project %v: %s", projectID, err)
-		return scanResponse.Scans, fmt.Errorf("failed to fetch scans of project %v: %s", projectID, err)
-	}
-
-	err = json.Unmarshal(data, &scanResponse)
-	return scanResponse.Scans, err
+	return c.GetLastScansFiltered(scanFilter)
 }
 
 func (f ScanFilter) AddURLValues(params *url.Values) {
@@ -355,6 +333,9 @@ func (f ScanFilter) AddURLValues(params *url.Values) {
 	}
 	if f.Limit != 0 {
 		params.Add("limit", strconv.Itoa(f.Limit))
+	}
+	if f.ProjectID != "" {
+		params.Add("project-id", f.ProjectID)
 	}
 
 	for _, b := range f.Branches {
@@ -372,58 +353,17 @@ func (f ScanFilter) AddURLValues(params *url.Values) {
 }
 
 func (c Cx1Client) GetLastScansByIDFiltered(projectID string, filter ScanFilter) ([]Scan, error) {
-	var scanResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-		Scans              []Scan
-	}
-
-	query := url.Values{
-		"project-id": {projectID},
-		"sort":       {"+created_at"},
-	}
-
-	filter.AddURLValues(&query)
-
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", query.Encode()), nil, nil)
-	if err != nil {
-		c.logger.Tracef("Failed to fetch scans of project %v: %s", projectID, err)
-		return scanResponse.Scans, fmt.Errorf("failed to fetch scans of project %v: %s", projectID, err)
-	}
-
-	err = json.Unmarshal(data, &scanResponse)
-	return scanResponse.Scans, err
+	filter.ProjectID = projectID
+	return c.GetLastScansFiltered(filter)
 }
 
-// GetScans returns all scan status on the project addressed by projectID
-func (c Cx1Client) GetLastScansByStatus(projectID string, limit int, status []string) ([]Scan, error) {
-	c.depwarn("GetLastScansByStatus", "GetLastScansByStatusAndID")
-	return c.GetLastScansByStatusAndID(projectID, limit, status)
-}
 func (c Cx1Client) GetLastScansByStatusAndID(projectID string, limit int, status []string) ([]Scan, error) {
-	var scanResponse struct {
-		TotalCount         uint64
-		FilteredTotalCount uint64
-		Scans              []Scan
+	scanFilter := ScanFilter{
+		ProjectID: projectID,
+		Limit:     limit,
+		Statuses:  status,
 	}
-	body := url.Values{
-		"project-id": {projectID},
-		"offset":     {fmt.Sprintf("%d", 0)},
-		"limit":      {fmt.Sprintf("%d", limit)},
-		"sort":       {"+created_at"},
-		"statuses":   status,
-	}
-
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/scans?%v", body.Encode()), nil, nil)
-	if err != nil {
-		c.logger.Tracef("Failed to fetch scans of project %v: %s", projectID, err)
-		return scanResponse.Scans, fmt.Errorf("failed to fetch scans of project %v: %s", projectID, err)
-	}
-
-	//c.logger.Infof( "Returned: %v", string(data) )
-
-	err = json.Unmarshal(data, &scanResponse)
-	return scanResponse.Scans, err
+	return c.GetLastScansFiltered(scanFilter)
 }
 
 // convenience
