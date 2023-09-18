@@ -151,6 +151,7 @@ type Project struct {
 	CreatedAt     string                        `json:"createdAt"`
 	UpdatedAt     string                        `json:"updatedAt"`
 	Groups        []string                      `json:"groups"`
+	Applications  []string                      `json:"applicationIds"`
 	Tags          map[string]string             `json:"tags"`
 	RepoUrl       string                        `json:"repoUrl"`
 	MainBranch    string                        `json:"mainBranch"`
@@ -272,6 +273,7 @@ type Scan struct {
 }
 
 type ScanFilter struct {
+	ProjectID string   `json:"project-id"`
 	Limit     int      `json:"limit"`
 	Offset    int      `json:"offset"`
 	TagKeys   []string `json:"tags-keys"`

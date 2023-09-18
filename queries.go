@@ -45,6 +45,24 @@ func (c Cx1Client) GetQueryByName(level, language, group, query string) (AuditQu
 	return q, nil
 }
 
+func (c Cx1Client) GetQueryByPath(level, path string) (AuditQuery, error) {
+	c.logger.Debugf("Get %v query by path: %v", level, path)
+
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/cx-audit/queries/%v/%v", level, strings.Replace(path, "/", "%2f", -1)), nil, nil)
+	if err != nil {
+		return AuditQuery{}, err
+	}
+
+	var q AuditQuery
+	err = json.Unmarshal(response, &q)
+	if err != nil {
+		return q, err
+	}
+	q.ParsePath()
+	q.LevelID = level
+	return q, nil
+}
+
 func (c Cx1Client) GetQueriesByLevelID(level, levelId string) ([]AuditQuery, error) {
 	c.logger.Debugf("Get all queries for %v", level)
 
@@ -712,7 +730,19 @@ func (c Cx1Client) UpdateQueries(level string, queries []QueryUpdate) error {
 	jsonBody, _ := json.Marshal(queries)
 	response, err := c.sendRequest(http.MethodPut, fmt.Sprintf("/cx-audit/queries/%v", level), bytes.NewReader(jsonBody), nil)
 	if err != nil {
-		return err
+		// Workaround to fix issue in CX1: sometimes the query is saved but still throws a 500 error
+		c.logger.Warnf("Query update failed with %s but it's buggy, checking if the query was updated anyway", err)
+		for _, q := range queries {
+			aq, err2 := c.GetQueryByPath(level, q.Path)
+			if err2 != nil {
+				return fmt.Errorf("retrieving the query %v on %v to check status failed with: %s", q.Path, level, err2)
+			}
+			if aq.Source != q.Source {
+				return fmt.Errorf("query %v on %v source was not updated", q.Path, level)
+			}
+			c.logger.Warnf("Query %v on %v was successfully updated despite the error", q.Path, level)
+		}
+		return nil
 	}
 	if string(response) == "" {
 		return nil
@@ -729,7 +759,7 @@ func (c Cx1Client) UpdateQueries(level string, queries []QueryUpdate) error {
 	}
 
 	if responseStruct.Type == "ERROR" {
-		return fmt.Errorf("error while compiling queries: %v", responseStruct.Message)
+		return fmt.Errorf("error while saving queries: %v", responseStruct.Message)
 	} else {
 		return nil
 	}
