@@ -44,6 +44,40 @@ func (c Cx1Client) CreateProject(projectname string, cx1_group_ids []string, tag
 	return project, err
 }
 
+func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids []string, tags map[string]string, applicationId string) (Project, error) {
+	c.logger.Debugf("Create Project %v in applicationId %v", projectname, applicationId)
+	data := map[string]interface{}{
+		"name":        projectname,
+		"groups":      []string{},
+		"tags":        map[string]string{},
+		"criticality": 3,
+		"origin":      cxOrigin,
+	}
+
+	if len(tags) > 0 {
+		data["tags"] = tags
+	}
+	if len(cx1_group_ids) > 0 {
+		data["groups"] = cx1_group_ids
+	}
+
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		return Project{}, err
+	}
+
+	var project Project
+	response, err := c.sendRequest(http.MethodPost, fmt.Sprintf("/projects/application/%v", applicationId), bytes.NewReader(jsonBody), nil)
+	if err != nil {
+		c.logger.Tracef("Error while creating project %v: %s", projectname, err)
+		return project, err
+	}
+
+	err = json.Unmarshal(response, &project)
+
+	return project, err
+}
+
 func (p *Project) String() string {
 	return fmt.Sprintf("[%v] %v", ShortenGUID(p.ProjectID), p.Name)
 }
@@ -459,6 +493,43 @@ func (c Cx1Client) GetOrCreateProjectByName(name string) (Project, error) {
 	}
 
 	return c.CreateProject(name, []string{}, map[string]string{})
+}
+
+func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicationName string) (Project, Application, error) {
+	var application Application
+	var project Project
+	var err error
+	application, err = c.GetApplicationByName(applicationName)
+	if err != nil {
+		application, err = c.CreateApplication(applicationName)
+		if err != nil {
+			return project, application, fmt.Errorf("attempt to create project %v in application %v failed, application did not exist and could not be created due to error: %s", projectName, applicationName, err)
+		}
+	}
+
+	project, err = c.GetProjectByName(projectName)
+	if err != nil {
+		project, err = c.CreateProjectInApplication(projectName, []string{}, map[string]string{}, application.ApplicationID)
+		if err != nil {
+			return project, application, fmt.Errorf("attempt to create project %v in application %v failed, project could not be created due to error: %s", projectName, applicationName, err)
+		}
+		return project, application, nil
+	}
+
+	// project exists and application exists
+	projectInCorrectApp := false
+	for _, app := range project.Applications {
+		if app == application.ApplicationID {
+			projectInCorrectApp = true
+			break
+		}
+	}
+
+	if !projectInCorrectApp {
+		return Project{}, application, fmt.Errorf("attempt to create project %v in application %v failed, project already exists elsewhere", projectName, applicationName)
+	}
+
+	return project, application, nil
 }
 
 func (p Project) GetConfigurationByName(configKey string) *ProjectConfigurationSetting {
