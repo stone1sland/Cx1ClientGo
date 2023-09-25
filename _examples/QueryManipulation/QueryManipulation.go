@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/cxpsemea/Cx1ClientGo"
@@ -32,7 +31,7 @@ func main() {
 	tenant := os.Args[3]
 	api_key := os.Args[4]
 
-	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
+	//proxyURL, _ := url.Parse("http://127.0.0.1:8080")
 	transport := &http.Transport{}
 	transport.Proxy = http.ProxyURL(proxyURL)
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}

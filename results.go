@@ -108,25 +108,25 @@ func (c Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
 	return err
 }
 
-func (c Cx1Client) GetResultsPredicates(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
+func (c Cx1Client) GetResultsPredicates(SimilarityID string, ProjectID string) ([]ResultsPredicates, error) {
 	c.depwarn("GetResultsPredicates", "GetResultsPredicatesByID")
 	return c.GetResultsPredicatesByID(SimilarityID, ProjectID)
 }
 
-func (c Cx1Client) GetResultsPredicatesByID(SimilarityID int64, ProjectID string) ([]ResultsPredicates, error) {
-	c.logger.Debugf("Fetching results predicates for project %v similarityId %d", ProjectID, SimilarityID)
+func (c Cx1Client) GetResultsPredicatesByID(SimilarityID string, ProjectID string) ([]ResultsPredicates, error) {
+	c.logger.Debugf("Fetching results predicates for project %v similarityId %v", ProjectID, SimilarityID)
 
 	var Predicates struct {
 		PredicateHistoryPerProject []struct {
 			ProjectID    string
-			SimilarityID int64 `json:"similarityId,string"`
+			SimilarityID string `json:"similarityId"`
 			Predicates   []ResultsPredicates
 			TotalCount   uint
 		}
 
 		TotalCount uint
 	}
-	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%d?project-ids=%v", SimilarityID, ProjectID), nil, nil)
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v?project-ids=%v", SimilarityID, ProjectID), nil, nil)
 	if err != nil {
 		return []ResultsPredicates{}, err
 	}
@@ -144,7 +144,7 @@ func (c Cx1Client) GetResultsPredicatesByID(SimilarityID int64, ProjectID string
 }
 
 func (r ScanResult) String() string {
-	return fmt.Sprintf("%v (%d) - %v to %v - in file %v:%d", r.Data.QueryName, r.SimilarityID, r.Data.Nodes[0].Name, r.Data.Nodes[len(r.Data.Nodes)-1].Name, r.Data.Nodes[0].FileName, r.Data.Nodes[0].Line)
+	return fmt.Sprintf("%v (%v) - %v to %v - in file %v:%d", r.Data.QueryName, r.SimilarityID, r.Data.Nodes[0].Name, r.Data.Nodes[len(r.Data.Nodes)-1].Name, r.Data.Nodes[0].FileName, r.Data.Nodes[0].Line)
 }
 
 func addResultStatus(summary *ScanResultStatusSummary, result *ScanResult) {

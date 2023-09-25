@@ -219,7 +219,7 @@ type RunningScan struct {
 
 type ResultsPredicates struct {
 	PredicateID  string `json:"ID"`
-	SimilarityID int64  `json:"similarityId,string"`
+	SimilarityID string `json:"similarityId"`
 	ProjectID    string `json:"projectId"`
 	State        string `json:"state"`
 	Comment      string `json:"comment"`
@@ -325,7 +325,7 @@ type ScanResultNodes struct {
 type ScanResult struct {
 	Type                 string
 	ResultID             string `json:"id"`
-	SimilarityID         int64  `json:"similarityId,string"`
+	SimilarityID         string `json:"similarityId"`
 	Status               string
 	State                string
 	Severity             string
