@@ -516,6 +516,11 @@ func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicatio
 		return project, application, nil
 	}
 
+	project, err = c.GetProjectByID(project.ProjectID) //TODO: check why project.Applications is not marshalled via GetProjectByName()
+	if err != nil {
+		return project, application, fmt.Errorf("attempt to get project %v failed : %s", project.ProjectID, err)
+	}
+
 	// project exists and application exists
 	projectInCorrectApp := false
 	for _, app := range project.Applications {
