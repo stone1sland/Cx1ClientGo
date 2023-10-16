@@ -6,18 +6,21 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
-func (c Cx1Client) GetScanResults(scanID string, limit uint64) ([]ScanResult, error) {
+func (c Cx1Client) GetScanResults(scanID string, limit uint64) (ScanResultSet, error) {
 	c.depwarn("GetScanResults", "GetScanResultsByID")
 	return c.GetScanResultsByID(scanID, limit)
 }
-func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) ([]ScanResult, error) {
+func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSet, error) {
 	c.logger.Debug("Get Cx1 Scan Results")
 	var resultResponse struct {
-		Results    []ScanResult
+		Results    []map[string]interface{}
 		TotalCount int
 	}
+
+	var ResultSet ScanResultSet
 
 	params := url.Values{
 		"scan-id":  {scanID},
@@ -30,23 +33,56 @@ func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) ([]ScanResult
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/results/?%v", params.Encode()), nil, nil)
 	if err != nil && len(response) == 0 {
 		c.logger.Tracef("Failed to retrieve scan results for scan ID %v", scanID)
-		return []ScanResult{}, err
+		return ResultSet, err
 	}
 
 	err = json.Unmarshal(response, &resultResponse)
 	if err != nil {
 		c.logger.Tracef("Failed while parsing response: %s", err)
 		c.logger.Tracef("Response contents: %s", string(response))
-		return []ScanResult{}, err
+		return ResultSet, err
 	}
 	c.logger.Debugf("Retrieved %d results", resultResponse.TotalCount)
 
 	if len(resultResponse.Results) != resultResponse.TotalCount {
 		c.logger.Warnf("Expected results total count %d but parsed only %d", resultResponse.TotalCount, len(resultResponse.Results))
-		c.logger.Warnf("Response was: %v", string(response))
+		c.logger.Tracef("Response was: %v", string(response))
 	}
 
-	return resultResponse.Results, nil
+	for _, r := range resultResponse.Results {
+		//c.logger.Infof("Result %v: %v", r["similarityId"].(string), r["type"].(string))
+		jsonResult, _ := json.Marshal(r)
+		switch r["type"].(string) {
+		case "sast":
+			var SASTResult ScanSASTResult
+			err := json.Unmarshal(jsonResult, &SASTResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to SAST type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.SAST = append(ResultSet.SAST, SASTResult)
+			}
+		case "sca":
+			var SCAResult ScanSCAResult
+			err := json.Unmarshal(jsonResult, &SCAResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to SCA type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.SCA = append(ResultSet.SCA, SCAResult)
+			}
+		case "kics":
+			var KICSResult ScanKICSResult
+			err := json.Unmarshal(jsonResult, &KICSResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to KICS type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.KICS = append(ResultSet.KICS, KICSResult)
+			}
+		default:
+			c.logger.Warnf("Unable to unmarshal result %v of unknown type %v", r["similarityId"].(string), r["type"].(string))
+		}
+	}
+
+	return ResultSet, nil
 }
 
 func (c Cx1Client) GetScanResultsCount(scanID string) (uint64, error) {
@@ -143,8 +179,23 @@ func (c Cx1Client) GetResultsPredicatesByID(SimilarityID string, ProjectID strin
 	return Predicates.PredicateHistoryPerProject[0].Predicates, err
 }
 
-func (r ScanResult) String() string {
+func (r ScanSASTResult) String() string {
 	return fmt.Sprintf("%v (%v) - %v to %v - in file %v:%d", r.Data.QueryName, r.SimilarityID, r.Data.Nodes[0].Name, r.Data.Nodes[len(r.Data.Nodes)-1].Name, r.Data.Nodes[0].FileName, r.Data.Nodes[0].Line)
+}
+func (r ScanKICSResult) String() string {
+	return fmt.Sprintf("%v - %v (%v) - %v to %v - in file %v:%d", r.Data.Group, r.Data.QueryName, r.SimilarityID, r.Data.IssueType, r.Data.Value, r.Data.FileName, r.Data.Line)
+}
+func (r ScanSCAResult) String() string {
+	return fmt.Sprintf("%v - %v (%v) - recommended version %v: %v", r.Data.PackageIdentifier, r.Data.PublishedAt, r.SimilarityID, r.Data.RecommendedVersion, r.Data.GetType("Advisory").URL)
+}
+
+func (r ScanSCAResultData) GetType(packageDataType string) ScanSCAResultPackageData {
+	for _, p := range r.PackageData {
+		if strings.EqualFold(p.Type, packageDataType) {
+			return p
+		}
+	}
+	return ScanSCAResultPackageData{}
 }
 
 func addResultStatus(summary *ScanResultStatusSummary, result *ScanResult) {
