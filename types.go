@@ -297,16 +297,61 @@ type ScanMetadata struct {
 	PresetName            string `json:"queryPreset"`
 }
 
-type ScanResultData struct {
+type ScanResultSet struct {
+	SAST []ScanSASTResult
+	SCA  []ScanSCAResult
+	KICS []ScanKICSResult
+}
+
+// generic data common to all
+type ScanResult struct {
+	Type            string
+	ResultID        string `json:"id"`
+	SimilarityID    string `json:"similarityId"`
+	Status          string
+	State           string
+	Severity        string
+	ConfidenceLevel int    `json:"confidenceLevel"`
+	CreatedAt       string `json:"created"`
+	FirstFoundAt    string
+	FoundAt         string
+	FirstScanId     string
+	Description     string
+	// Comments			// currently doesn't do anything?
+}
+
+type ScanKICSResult struct {
+	ScanResult
+	Data ScanKICSResultData
+	//VulnerabilityDetails ScanKICSResultDetails // currently {}
+}
+type ScanKICSResultData struct {
+	QueryID       string
+	QueryName     string
+	Group         string
+	QueryURL      string
+	FileName      string
+	Line          int
+	Platform      string
+	IssueType     string
+	ExpectedValue string
+	Value         string
+}
+
+type ScanSASTResult struct {
+	ScanResult
+	Data                 ScanSASTResultData
+	VulnerabilityDetails ScanSASTResultDetails
+}
+type ScanSASTResultData struct {
 	QueryID      uint64
 	QueryName    string
 	Group        string
 	ResultHash   string
 	LanguageName string
-	Nodes        []ScanResultNodes
+	Nodes        []ScanSASTResultNodes
 }
-
-type ScanResultNodes struct {
+type ScanSASTResultNodes struct {
 	ID          string
 	Line        uint64
 	Name        string
@@ -321,26 +366,41 @@ type ScanResultNodes struct {
 	MethodLine  uint64
 	Definitions string
 }
-
-type ScanResult struct {
-	Type                 string
-	ResultID             string `json:"id"`
-	SimilarityID         string `json:"similarityId"`
-	Status               string
-	State                string
-	Severity             string
-	CreatedAt            string `json:"created"`
-	FirstFoundAt         string
-	FoundAt              string
-	FirstScanId          string
-	Description          string
-	Data                 ScanResultData
-	VulnerabilityDetails ScanResultDetails
-}
-
-type ScanResultDetails struct {
+type ScanSASTResultDetails struct {
 	CweId       int
 	Compliances []string
+}
+
+type ScanSCAResult struct {
+	ScanResult
+	Data                 ScanSCAResultData `json:"data"`
+	VulnerabilityDetails ScanSCAResultDetails
+}
+type ScanSCAResultData struct {
+	PackageIdentifier  string
+	PublishedAt        string
+	Recommendation     string
+	RecommendedVersion string
+	//ExploitableMethods // TODO
+	PackageData []ScanSCAResultPackageData
+}
+type ScanSCAResultDetails struct {
+	CweId     string
+	CVSSScore float64
+	CveName   string
+	Cvss      ScanSCAResultCVSS
+}
+type ScanSCAResultCVSS struct {
+	Version          int
+	AttackVector     string
+	Availability     string
+	Confidentiality  string
+	AttackComplexity string
+}
+type ScanSCAResultPackageData struct {
+	URL     string
+	Type    string
+	Comment string
 }
 
 type ScanStatusDetails struct {
