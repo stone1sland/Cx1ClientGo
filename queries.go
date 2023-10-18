@@ -246,7 +246,6 @@ func (c Cx1Client) AuditEnginePollingByIDWithTimeout(auditSessionId string, dela
 		if err != nil {
 			return err
 		}
-		pollingCounter += delaySeconds
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
 			return fmt.Errorf("audit engine polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
 		}
@@ -255,6 +254,7 @@ func (c Cx1Client) AuditEnginePollingByIDWithTimeout(auditSessionId string, dela
 			return nil
 		}
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
 	}
 
 	return nil
@@ -323,7 +323,6 @@ func (c Cx1Client) AuditLanguagePollingByIDWithTimeout(auditSessionId string, de
 			return languages, err
 		}
 
-		pollingCounter += delaySeconds
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
 			return languages, fmt.Errorf("audit languages polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
 		}
@@ -333,6 +332,7 @@ func (c Cx1Client) AuditLanguagePollingByIDWithTimeout(auditSessionId string, de
 		}
 
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
 	}
 
 	return languages, fmt.Errorf("unknown error")
@@ -400,7 +400,6 @@ func (c Cx1Client) AuditScanPollingByIDWithTimeout(auditSessionId string, delayS
 		if err != nil {
 			return err
 		}
-		pollingCounter += delaySeconds
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
 			return fmt.Errorf("audit scan polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
 		}
@@ -409,6 +408,7 @@ func (c Cx1Client) AuditScanPollingByIDWithTimeout(auditSessionId string, delayS
 		}
 
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
 	}
 
 	return fmt.Errorf("unknown error")
@@ -623,7 +623,6 @@ func (c Cx1Client) AuditCompilePollingByIDWithTimeout(auditSessionId string, del
 			return nil
 		}
 
-		pollingCounter += delaySeconds
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
 			return fmt.Errorf("audit query compilation polled %d seconds without success: session may no longer be valid - use cx1client.get/setclientvars to change timeout", pollingCounter)
 		}
@@ -632,6 +631,7 @@ func (c Cx1Client) AuditCompilePollingByIDWithTimeout(auditSessionId string, del
 		}
 
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
 	}
 	return fmt.Errorf("unknown error")
 }

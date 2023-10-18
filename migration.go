@@ -106,11 +106,11 @@ func (c Cx1Client) ImportPollingByIDWithTimeout(importID string, delaySeconds, m
 		case "partial":
 			return status.Status, nil
 		}
-		pollingCounter += delaySeconds
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
 			return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
 		}
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
 	}
 }
 
