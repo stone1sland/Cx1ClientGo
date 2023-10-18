@@ -36,7 +36,9 @@ func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSe
 		return ResultSet, err
 	}
 
-	err = json.Unmarshal(response, &resultResponse)
+	dec := json.NewDecoder(bytes.NewReader(response))
+	dec.UseNumber()
+	err = dec.Decode(&resultResponse)
 	if err != nil {
 		c.logger.Tracef("Failed while parsing response: %s", err)
 		c.logger.Tracef("Response contents: %s", string(response))
