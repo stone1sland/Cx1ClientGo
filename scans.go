@@ -312,11 +312,11 @@ func (c Cx1Client) ScanPollingWithTimeout(s *Scan, detailed bool, delaySeconds, 
 			break
 		}
 
-		pollingCounter += delaySeconds
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
 			return scan, fmt.Errorf("scan polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
 		}
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		pollingCounter += delaySeconds
 	}
 	return scan, nil
 }
