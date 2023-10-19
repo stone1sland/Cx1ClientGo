@@ -19,18 +19,20 @@ type Cx1Client struct {
 }
 
 type ClientVars struct {
-	MigrationPollingMaxSeconds       int
-	MigrationPollingDelaySeconds     int
-	AuditEnginePollingMaxSeconds     int
-	AuditEnginePollingDelaySeconds   int
-	AuditScanPollingMaxSeconds       int
-	AuditScanPollingDelaySeconds     int
-	AuditLanguagePollingMaxSeconds   int
-	AuditLanguagePollingDelaySeconds int
-	AuditCompilePollingMaxSeconds    int
-	AuditCompilePollingDelaySeconds  int
-	ScanPollingMaxSeconds            int
-	ScanPollingDelaySeconds          int
+	MigrationPollingMaxSeconds                int
+	MigrationPollingDelaySeconds              int
+	AuditEnginePollingMaxSeconds              int
+	AuditEnginePollingDelaySeconds            int
+	AuditScanPollingMaxSeconds                int
+	AuditScanPollingDelaySeconds              int
+	AuditLanguagePollingMaxSeconds            int
+	AuditLanguagePollingDelaySeconds          int
+	AuditCompilePollingMaxSeconds             int
+	AuditCompilePollingDelaySeconds           int
+	ScanPollingMaxSeconds                     int
+	ScanPollingDelaySeconds                   int
+	ProjectApplicationLinkPollingMaxSeconds   int
+	ProjectApplicationLinkPollingDelaySeconds int
 }
 
 type AccessAssignment struct {

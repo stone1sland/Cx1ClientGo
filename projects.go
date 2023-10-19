@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
+
+	"golang.org/x/exp/slices"
 )
 
 // Projects
@@ -74,8 +77,37 @@ func (c Cx1Client) CreateProjectInApplication(projectname string, cx1_group_ids 
 	}
 
 	err = json.Unmarshal(response, &project)
+	if err != nil {
+		return Project{}, err
+	}
 
-	return project, err
+	return c.ProjectInApplicationPollingByID(project.ProjectID, applicationId)
+}
+
+func (c Cx1Client) ProjectInApplicationPollingByID(projectId, applicationId string) (Project, error) {
+	return c.ProjectInApplicationPollingByIDWithTimeout(projectId, applicationId, c.consts.ProjectApplicationLinkPollingDelaySeconds, c.consts.ProjectApplicationLinkPollingMaxSeconds)
+}
+
+func (c Cx1Client) ProjectInApplicationPollingByIDWithTimeout(projectId, applicationId string, delaySeconds, maxSeconds int) (Project, error) {
+	project, err := c.GetProjectByID(projectId)
+	if err != nil {
+		return project, fmt.Errorf("error while polling to verify that project was assigned to application: %s", err)
+	}
+
+	pollingCounter := 0
+	for !slices.Contains(project.Applications, applicationId) {
+		if pollingCounter > maxSeconds {
+			return project, fmt.Errorf("project %v is not assigned to application ID %v after %d seconds, aborting", project.String(), applicationId, maxSeconds)
+		}
+		c.logger.Debugf("Project is not yet assigned to the application, polling")
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		project, err = c.GetProjectByID(project.ProjectID)
+		if err != nil {
+			return project, fmt.Errorf("error while polling to verify that project was assigned to application: %s", err)
+		}
+		pollingCounter += delaySeconds
+	}
+	return project, nil
 }
 
 func (p *Project) String() string {
@@ -511,28 +543,30 @@ func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicatio
 	if err != nil {
 		project, err = c.CreateProjectInApplication(projectName, []string{}, map[string]string{}, application.ApplicationID)
 		if err != nil {
-			return project, application, fmt.Errorf("attempt to create project %v in application %v failed, project could not be created due to error: %s", projectName, applicationName, err)
+			return project, application, fmt.Errorf("attempt to create project %v in application %v failed due to error: %s", projectName, applicationName, err)
 		}
 		return project, application, nil
 	}
 
-	project, err = c.GetProjectByID(project.ProjectID) //TODO: check why project.Applications is not marshalled via GetProjectByName()
-	if err != nil {
-		return project, application, fmt.Errorf("attempt to get project %v failed : %s", project.ProjectID, err)
-	}
-
-	// project exists and application exists
-	projectInCorrectApp := false
-	for _, app := range project.Applications {
-		if app == application.ApplicationID {
-			projectInCorrectApp = true
-			break
+	/*
+		project, err = c.GetProjectByID(project.ProjectID) //TODO: check why project.Applications is not marshalled via GetProjectByName()
+		if err != nil {
+			return project, application, fmt.Errorf("attempt to get project %v failed : %s", project.ProjectID, err)
 		}
-	}
 
-	if !projectInCorrectApp {
-		return Project{}, application, fmt.Errorf("attempt to create project %v in application %v failed, project already exists elsewhere", projectName, applicationName)
-	}
+		// project exists and application exists, but the assignment may take a while
+		projectInCorrectApp := false
+		for _, app := range project.Applications {
+			if app == application.ApplicationID {
+				projectInCorrectApp = true
+				break
+			}
+		}
+
+		if !projectInCorrectApp {
+			return Project{}, application, fmt.Errorf("attempt to create project %v in application %v failed, project already exists elsewhere", projectName, applicationName)
+		}
+	*/
 
 	return project, application, nil
 }
