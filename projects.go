@@ -548,26 +548,6 @@ func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicatio
 		return project, application, nil
 	}
 
-	/*
-		project, err = c.GetProjectByID(project.ProjectID) //TODO: check why project.Applications is not marshalled via GetProjectByName()
-		if err != nil {
-			return project, application, fmt.Errorf("attempt to get project %v failed : %s", project.ProjectID, err)
-		}
-
-		// project exists and application exists, but the assignment may take a while
-		projectInCorrectApp := false
-		for _, app := range project.Applications {
-			if app == application.ApplicationID {
-				projectInCorrectApp = true
-				break
-			}
-		}
-
-		if !projectInCorrectApp {
-			return Project{}, application, fmt.Errorf("attempt to create project %v in application %v failed, project already exists elsewhere", projectName, applicationName)
-		}
-	*/
-
 	return project, application, nil
 }
 
