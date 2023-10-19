@@ -244,23 +244,26 @@ func (c *Cx1Client) InitializeClient() {
 		c.logger.Warnf("Failed to get tenant flags: %s", err)
 	}
 
-	c.consts.MigrationPollingMaxSeconds = 20 * 15
+	c.consts.MigrationPollingMaxSeconds = 300 // 5 min
 	c.consts.MigrationPollingDelaySeconds = 15
 
-	c.consts.AuditEnginePollingMaxSeconds = 20 * 15
+	c.consts.AuditEnginePollingMaxSeconds = 300 // 5 min
 	c.consts.AuditEnginePollingDelaySeconds = 15
 
-	c.consts.AuditScanPollingMaxSeconds = 40 * 15
+	c.consts.AuditScanPollingMaxSeconds = 600 // 10 min
 	c.consts.AuditScanPollingDelaySeconds = 15
 
-	c.consts.AuditLanguagePollingMaxSeconds = 20 * 15
+	c.consts.AuditLanguagePollingMaxSeconds = 300 // 5 min
 	c.consts.AuditLanguagePollingDelaySeconds = 15
 
-	c.consts.AuditCompilePollingMaxSeconds = 40 * 15
+	c.consts.AuditCompilePollingMaxSeconds = 600 // 10 min
 	c.consts.AuditCompilePollingDelaySeconds = 15
 
 	c.consts.ScanPollingMaxSeconds = 0
 	c.consts.ScanPollingDelaySeconds = 15
+
+	c.consts.ProjectApplicationLinkPollingDelaySeconds = 5
+	c.consts.ProjectApplicationLinkPollingMaxSeconds = 300 // 5 min
 }
 
 func (c *Cx1Client) RefreshFlags() error {
