@@ -123,42 +123,69 @@ func (c Cx1Client) GetScanResultsCountByID(scanID string) (uint64, error) {
 }
 
 // convenience function
-func (r ScanResult) CreateResultsPredicate(projectId string) ResultsPredicates {
-	return ResultsPredicates{
-		SimilarityID: r.SimilarityID,
-		ProjectID:    projectId,
-		State:        r.State,
-		Severity:     r.Severity,
+func (r ScanSASTResult) CreateResultsPredicate(projectId string) SASTResultsPredicates {
+	return SASTResultsPredicates{
+		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
+			ProjectID: projectId,
+			State:     r.State,
+			Severity:  r.Severity,
+		},
+	}
+}
+func (r ScanKICSResult) CreateResultsPredicate(projectId string) KICSResultsPredicates {
+	return KICSResultsPredicates{
+		ResultsPredicatesBase{SimilarityID: r.SimilarityID,
+			ProjectID: projectId,
+			State:     r.State,
+			Severity:  r.Severity,
+		},
 	}
 }
 
 // results
-func (c Cx1Client) AddResultsPredicates(predicates []ResultsPredicates) error {
-	c.logger.Debugf("Adding %d results predicates", len(predicates))
+func (c Cx1Client) AddResultsPredicates(predicates []SASTResultsPredicates) error {
+	c.depwarn("AddResultsPredicates", "AddSASTResultsPredicates")
+	return c.AddSASTResultsPredicates(predicates)
+}
+
+func (c Cx1Client) AddSASTResultsPredicates(predicates []SASTResultsPredicates) error {
+	c.logger.Debugf("Adding %d SAST results predicates", len(predicates))
 
 	jsonBody, err := json.Marshal(predicates)
 	if err != nil {
-		c.logger.Tracef("Failed to add results predicates: %s", err)
+		c.logger.Tracef("Failed to add SAST results predicates: %s", err)
 		return err
 	}
 
 	_, err = c.sendRequest(http.MethodPost, "/sast-results-predicates", bytes.NewReader(jsonBody), nil)
 	return err
 }
+func (c Cx1Client) AddKICSResultsPredicates(predicates []KICSResultsPredicates) error {
+	c.logger.Debugf("Adding %d KICS results predicates", len(predicates))
 
-func (c Cx1Client) GetResultsPredicates(SimilarityID string, ProjectID string) ([]ResultsPredicates, error) {
-	c.depwarn("GetResultsPredicates", "GetResultsPredicatesByID")
-	return c.GetResultsPredicatesByID(SimilarityID, ProjectID)
+	jsonBody, err := json.Marshal(predicates)
+	if err != nil {
+		c.logger.Tracef("Failed to add KICS results predicates: %s", err)
+		return err
+	}
+
+	_, err = c.sendRequest(http.MethodPost, "/kics-results-predicates", bytes.NewReader(jsonBody), nil)
+	return err
 }
 
-func (c Cx1Client) GetResultsPredicatesByID(SimilarityID string, ProjectID string) ([]ResultsPredicates, error) {
-	c.logger.Debugf("Fetching results predicates for project %v similarityId %v", ProjectID, SimilarityID)
+func (c Cx1Client) GetResultsPredicatesByID(SimilarityID string, ProjectID string) ([]SASTResultsPredicates, error) {
+	c.depwarn("GetResultsPredicatesByID", "GetSASTResultsPredicatesByID")
+	return c.GetSASTResultsPredicatesByID(SimilarityID, ProjectID)
+}
+
+func (c Cx1Client) GetSASTResultsPredicatesByID(SimilarityID string, ProjectID string) ([]SASTResultsPredicates, error) {
+	c.logger.Debugf("Fetching SAST results predicates for project %v similarityId %v", ProjectID, SimilarityID)
 
 	var Predicates struct {
 		PredicateHistoryPerProject []struct {
 			ProjectID    string
 			SimilarityID string `json:"similarityId"`
-			Predicates   []ResultsPredicates
+			Predicates   []SASTResultsPredicates
 			TotalCount   uint
 		}
 
@@ -166,19 +193,62 @@ func (c Cx1Client) GetResultsPredicatesByID(SimilarityID string, ProjectID strin
 	}
 	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/sast-results-predicates/%v?project-ids=%v", SimilarityID, ProjectID), nil, nil)
 	if err != nil {
-		return []ResultsPredicates{}, err
+		return []SASTResultsPredicates{}, err
 	}
 
 	err = json.Unmarshal(response, &Predicates)
 	if err != nil {
-		return []ResultsPredicates{}, err
+		return []SASTResultsPredicates{}, err
 	}
 
 	if Predicates.TotalCount == 0 {
-		return []ResultsPredicates{}, nil
+		return []SASTResultsPredicates{}, nil
 	}
 
 	return Predicates.PredicateHistoryPerProject[0].Predicates, err
+}
+
+func (c Cx1Client) GetKICSResultsPredicatesByID(SimilarityID string, ProjectID string) ([]KICSResultsPredicates, error) {
+	c.logger.Debugf("Fetching KICS results predicates for project %v similarityId %v", ProjectID, SimilarityID)
+
+	var Predicates struct {
+		PredicateHistoryPerProject []struct {
+			ProjectID    string
+			SimilarityID string `json:"similarityId"`
+			Predicates   []KICSResultsPredicates
+			TotalCount   uint
+		}
+
+		TotalCount uint
+	}
+	response, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/kics-results-predicates/%v?project-ids=%v", SimilarityID, ProjectID), nil, nil)
+	if err != nil {
+		return []KICSResultsPredicates{}, err
+	}
+
+	err = json.Unmarshal(response, &Predicates)
+	if err != nil {
+		return []KICSResultsPredicates{}, err
+	}
+
+	if Predicates.TotalCount == 0 {
+		return []KICSResultsPredicates{}, nil
+	}
+
+	return Predicates.PredicateHistoryPerProject[0].Predicates, err
+}
+
+// convenience function
+func (p *ResultsPredicatesBase) Update(state, severity, comment string) {
+	if state != "" && state != p.State {
+		p.State = state
+	}
+	if severity != "" && severity != p.Severity {
+		p.Severity = severity
+	}
+	if comment != "" {
+		p.Comment = comment
+	}
 }
 
 func (r ScanSASTResult) String() string {
@@ -200,7 +270,7 @@ func (r ScanSCAResultData) GetType(packageDataType string) ScanSCAResultPackageD
 	return ScanSCAResultPackageData{}
 }
 
-func addResultStatus(summary *ScanResultStatusSummary, result *ScanResult) {
+func addResultStatus(summary *ScanResultStatusSummary, result *ScanSASTResult) {
 	switch result.State {
 	case "CONFIRMED":
 		summary.Confirmed++
@@ -217,10 +287,10 @@ func addResultStatus(summary *ScanResultStatusSummary, result *ScanResult) {
 	}
 }
 
-func (c Cx1Client) GetScanResultSummary(results []ScanResult) ScanResultSummary {
+func (c Cx1Client) GetScanSASTResultSummary(results *ScanResultSet) ScanResultSummary {
 	summary := ScanResultSummary{}
 
-	for _, result := range results {
+	for _, result := range results.SAST {
 		switch result.Severity {
 		case "HIGH":
 			addResultStatus(&(summary.High), &result)
