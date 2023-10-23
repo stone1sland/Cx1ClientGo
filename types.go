@@ -219,7 +219,7 @@ type RunningScan struct {
 	UpdatedAt time.Time
 }
 
-type ResultsPredicates struct {
+type ResultsPredicatesBase struct {
 	PredicateID  string `json:"ID"`
 	SimilarityID string `json:"similarityId"`
 	ProjectID    string `json:"projectId"`
@@ -228,6 +228,13 @@ type ResultsPredicates struct {
 	Severity     string `json:"severity"`
 	CreatedBy    string `json:"createdBy"`
 	CreatedAt    string `json:"createdAt"`
+}
+
+type SASTResultsPredicates struct {
+	ResultsPredicatesBase // actually the same structure but different endpoint
+}
+type KICSResultsPredicates struct {
+	ResultsPredicatesBase // actually the same structure but different endpoint
 }
 
 /*
@@ -306,7 +313,7 @@ type ScanResultSet struct {
 }
 
 // generic data common to all
-type ScanResult struct {
+type ScanResultBase struct {
 	Type            string
 	ResultID        string `json:"id"`
 	SimilarityID    string `json:"similarityId"`
@@ -323,7 +330,7 @@ type ScanResult struct {
 }
 
 type ScanKICSResult struct {
-	ScanResult
+	ScanResultBase
 	Data ScanKICSResultData
 	//VulnerabilityDetails ScanKICSResultDetails // currently {}
 }
@@ -341,7 +348,7 @@ type ScanKICSResultData struct {
 }
 
 type ScanSASTResult struct {
-	ScanResult
+	ScanResultBase
 	Data                 ScanSASTResultData
 	VulnerabilityDetails ScanSASTResultDetails
 }
@@ -374,7 +381,7 @@ type ScanSASTResultDetails struct {
 }
 
 type ScanSCAResult struct {
-	ScanResult
+	ScanResultBase
 	Data                 ScanSCAResultData `json:"data"`
 	VulnerabilityDetails ScanSCAResultDetails
 }
