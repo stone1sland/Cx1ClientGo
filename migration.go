@@ -109,6 +109,7 @@ func (c Cx1Client) ImportPollingByIDWithTimeout(importID string, delaySeconds, m
 		if maxSeconds != 0 && pollingCounter >= maxSeconds {
 			return "timeout", fmt.Errorf("import polling reached %d seconds, aborting - use cx1client.get/setclientvars to change", pollingCounter)
 		}
+		c.logger.Infof("Polling every %d seconds, up to %d", delaySeconds, maxSeconds)
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
 		pollingCounter += delaySeconds
 	}
