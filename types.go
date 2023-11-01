@@ -148,21 +148,21 @@ type Preset struct {
 }
 
 type Project struct {
-	ProjectID     string                        `json:"id"`
-	Name          string                        `json:"name"`
-	CreatedAt     string                        `json:"createdAt"`
-	UpdatedAt     string                        `json:"updatedAt"`
-	Groups        []string                      `json:"groups"`
-	Applications  []string                      `json:"applicationIds"`
-	Tags          map[string]string             `json:"tags"`
-	RepoUrl       string                        `json:"repoUrl"`
-	MainBranch    string                        `json:"mainBranch"`
-	Origin        string                        `json:"origin"`
-	Criticality   uint                          `json:"criticality"`
-	Configuration []ProjectConfigurationSetting `json:"-"`
+	ProjectID     string                 `json:"id"`
+	Name          string                 `json:"name"`
+	CreatedAt     string                 `json:"createdAt"`
+	UpdatedAt     string                 `json:"updatedAt"`
+	Groups        []string               `json:"groups"`
+	Applications  []string               `json:"applicationIds"`
+	Tags          map[string]string      `json:"tags"`
+	RepoUrl       string                 `json:"repoUrl"`
+	MainBranch    string                 `json:"mainBranch"`
+	Origin        string                 `json:"origin"`
+	Criticality   uint                   `json:"criticality"`
+	Configuration []ConfigurationSetting `json:"-"`
 }
 
-type ProjectConfigurationSetting struct {
+type ConfigurationSetting struct {
 	Key             string `json:"key"`
 	Name            string `json:"name"`
 	Category        string `json:"category"`
