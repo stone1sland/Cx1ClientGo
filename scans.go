@@ -97,6 +97,24 @@ func (s *ScanSummary) TotalCount() uint64 {
 	return count
 }
 
+func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]ConfigurationSetting, error) {
+	c.logger.Debug("Getting project configuration")
+	var scanConfigurations []ConfigurationSetting
+	params := url.Values{
+		"project-id": {projectID},
+		"scan-id":    {scanID},
+	}
+	data, err := c.sendRequest(http.MethodGet, fmt.Sprintf("/configuration/scan?%v", params.Encode()), nil, nil)
+
+	if err != nil {
+		c.logger.Tracef("Failed to get scan configuration for project ID %v, scan ID %v: %s", projectID, scanID, err)
+		return scanConfigurations, err
+	}
+
+	err = json.Unmarshal([]byte(data), &scanConfigurations)
+	return scanConfigurations, err
+}
+
 func (c Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
 	c.depwarn("GetScanSummary", "GetScanSummaryByID")
 	return c.GetScanSummaryByID(scanID)

@@ -281,9 +281,9 @@ func (c Cx1Client) GetProjectConfiguration(project *Project) error {
 	return err
 }
 
-func (c Cx1Client) GetProjectConfigurationByID(projectID string) ([]ProjectConfigurationSetting, error) {
+func (c Cx1Client) GetProjectConfigurationByID(projectID string) ([]ConfigurationSetting, error) {
 	c.logger.Debug("Getting project configuration")
-	var projectConfigurations []ProjectConfigurationSetting
+	var projectConfigurations []ConfigurationSetting
 	params := url.Values{
 		"project-id": {projectID},
 	}
@@ -299,12 +299,12 @@ func (c Cx1Client) GetProjectConfigurationByID(projectID string) ([]ProjectConfi
 }
 
 // UpdateProjectConfiguration updates the configuration of the project addressed by projectID
-func (c Cx1Client) UpdateProjectConfiguration(project *Project, settings []ProjectConfigurationSetting) error {
+func (c Cx1Client) UpdateProjectConfiguration(project *Project, settings []ConfigurationSetting) error {
 	project.Configuration = settings
 	return c.UpdateProjectConfigurationByID(project.ProjectID, settings)
 }
 
-func (c Cx1Client) UpdateProjectConfigurationByID(projectID string, settings []ProjectConfigurationSetting) error {
+func (c Cx1Client) UpdateProjectConfigurationByID(projectID string, settings []ConfigurationSetting) error {
 	if len(settings) == 0 {
 		return fmt.Errorf("empty list of settings provided")
 	}
@@ -333,12 +333,12 @@ func (c Cx1Client) SetProjectBranch(projectID, branch string, allowOverride bool
 }
 
 func (c Cx1Client) SetProjectBranchByID(projectID, branch string, allowOverride bool) error {
-	var setting ProjectConfigurationSetting
+	var setting ConfigurationSetting
 	setting.Key = "scan.handler.git.branch"
 	setting.Value = branch
 	setting.AllowOverride = allowOverride
 
-	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
 func (c Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride bool) error {
@@ -347,12 +347,12 @@ func (c Cx1Client) SetProjectPreset(projectID, presetName string, allowOverride 
 }
 
 func (c Cx1Client) SetProjectPresetByID(projectID, presetName string, allowOverride bool) error {
-	var setting ProjectConfigurationSetting
+	var setting ConfigurationSetting
 	setting.Key = "scan.config.sast.presetName"
 	setting.Value = presetName
 	setting.AllowOverride = allowOverride
 
-	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
 func (c Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allowOverride bool) error {
@@ -361,12 +361,12 @@ func (c Cx1Client) SetProjectLanguageMode(projectID, languageMode string, allowO
 }
 
 func (c Cx1Client) SetProjectLanguageModeByID(projectID, languageMode string, allowOverride bool) error {
-	var setting ProjectConfigurationSetting
+	var setting ConfigurationSetting
 	setting.Key = "scan.config.sast.languageMode"
 	setting.Value = languageMode
 	setting.AllowOverride = allowOverride
 
-	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
 func (c Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride bool) error {
@@ -375,14 +375,14 @@ func (c Cx1Client) SetProjectFileFilter(projectID, filter string, allowOverride 
 }
 
 func (c Cx1Client) SetProjectFileFilterByID(projectID, filter string, allowOverride bool) error {
-	var setting ProjectConfigurationSetting
+	var setting ConfigurationSetting
 	setting.Key = "scan.config.sast.filter"
 	setting.Value = filter
 	setting.AllowOverride = allowOverride
 
 	// TODO - apply the filter across all languages? set up separate calls per engine? engine as param?
 
-	return c.UpdateProjectConfigurationByID(projectID, []ProjectConfigurationSetting{setting})
+	return c.UpdateProjectConfigurationByID(projectID, []ConfigurationSetting{setting})
 }
 
 func (c Cx1Client) GetLastScansByID(projectID string, limit int) ([]Scan, error) {
@@ -551,10 +551,18 @@ func (c Cx1Client) GetOrCreateProjectInApplicationByName(projectName, applicatio
 	return project, application, nil
 }
 
-func (p Project) GetConfigurationByName(configKey string) *ProjectConfigurationSetting {
-	for id := range p.Configuration {
-		if p.Configuration[id].Key == configKey {
-			return &(p.Configuration[id])
+func (p Project) GetConfigurationByName(configKey string) *ConfigurationSetting {
+	return getConfigurationByName(&p.Configuration, configKey)
+}
+
+func (c Cx1Client) GetConfigurationByName(config *[]ConfigurationSetting, configKey string) *ConfigurationSetting {
+	return getConfigurationByName(config, configKey)
+}
+
+func getConfigurationByName(config *[]ConfigurationSetting, configKey string) *ConfigurationSetting {
+	for id := range *config {
+		if (*config)[id].Key == configKey || (*config)[id].Name == configKey {
+			return &((*config)[id])
 		}
 	}
 	return nil
