@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	//"io/ioutil"
 	"net/http"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -46,8 +48,9 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 		logger:     logger}
 
 	cli.InitializeClient()
+	token, _ := conf.Token(ctx)
 
-	return &cli, nil
+	return &cli, cli.parseJWT(token.AccessToken)
 }
 
 func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
@@ -84,6 +87,7 @@ func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenan
 		logger:     logger}
 
 	cli.InitializeClient()
+	cli.parseJWT(token.AccessToken)
 
 	return &cli, nil
 }
@@ -296,8 +300,28 @@ func (c *Cx1Client) RefreshFlags() error {
 	return nil
 }
 
+func (c *Cx1Client) parseJWT(jwtToken string) error {
+	_, err := jwt.ParseWithClaims(jwtToken, &c.claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(nil), nil
+	})
+	return err
+}
+
 func (c Cx1Client) GetFlags() map[string]bool {
 	return c.flags
+}
+
+func (c Cx1Client) GetLicense() ASTLicense {
+	return c.claims.Cx1License
+}
+
+func (c Cx1Client) IsEngineAllowed(engine string) bool {
+	for _, eng := range c.claims.Cx1License.LicenseData.AllowedEngines {
+		if strings.EqualFold(engine, eng) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c Cx1Client) CheckFlag(flag string) (bool, error) {
