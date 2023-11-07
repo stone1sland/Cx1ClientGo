@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,6 +17,28 @@ type Cx1Client struct {
 	logger  *logrus.Logger
 	flags   map[string]bool // initial implementation ignoring "payload" part of the flag
 	consts  ClientVars
+	claims  Cx1Claims
+}
+
+type Cx1Claims struct {
+	jwt.RegisteredClaims
+	Cx1License ASTLicense `json:"ast-license"`
+}
+type ASTLicense struct {
+	ID          int
+	TenantID    string
+	PackageName string
+	LicenseData struct {
+		AllowedEngines     []string
+		APISecurityEnabled bool
+		CodebashingEnabled bool
+		DASTEnabled        bool
+		MaxConcurrentScans int
+		SCSEnabled         bool
+		ServiceType        string
+		Services           []string
+		UsersCount         int
+	}
 }
 
 type ClientVars struct {
