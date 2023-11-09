@@ -49,8 +49,9 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 
 	cli.InitializeClient()
 	token, _ := conf.Token(ctx)
+	cli.parseJWT(token.AccessToken)
 
-	return &cli, cli.parseJWT(token.AccessToken)
+	return &cli, nil
 }
 
 func NewAPIKeyClient(client *http.Client, base_url string, iam_url string, tenant string, api_key string, logger *logrus.Logger) (*Cx1Client, error) {
