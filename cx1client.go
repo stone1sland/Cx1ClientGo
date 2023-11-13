@@ -48,7 +48,10 @@ func NewOAuthClient(client *http.Client, base_url string, iam_url string, tenant
 		logger:     logger}
 
 	cli.InitializeClient()
-	token, _ := conf.Token(ctx)
+	token, err := conf.Token(ctx)
+	if err != nil {
+		logger.Errorf("Error retrieving token: %s", err)
+	}
 	cli.parseJWT(token.AccessToken)
 
 	return &cli, nil
