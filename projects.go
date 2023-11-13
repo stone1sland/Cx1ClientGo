@@ -90,21 +90,14 @@ func (c Cx1Client) ProjectInApplicationPollingByID(projectId, applicationId stri
 
 func (c Cx1Client) ProjectInApplicationPollingByIDWithTimeout(projectId, applicationId string, delaySeconds, maxSeconds int) (Project, error) {
 	project, err := c.GetProjectByID(projectId)
-	if err != nil {
-		return project, fmt.Errorf("error while polling to verify that project was assigned to application: %s", err)
-	}
-
 	pollingCounter := 0
-	for !slices.Contains(project.Applications, applicationId) {
+	for err != nil || !slices.Contains(project.Applications, applicationId) {
 		if pollingCounter > maxSeconds {
-			return project, fmt.Errorf("project %v is not assigned to application ID %v after %d seconds, aborting", project.String(), applicationId, maxSeconds)
+			return project, fmt.Errorf("project %v is not assigned to application ID %v after %d seconds, aborting", projectId, applicationId, maxSeconds)
 		}
 		c.logger.Debugf("Project is not yet assigned to the application, polling")
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
 		project, err = c.GetProjectByID(project.ProjectID)
-		if err != nil {
-			return project, fmt.Errorf("error while polling to verify that project was assigned to application: %s", err)
-		}
 		pollingCounter += delaySeconds
 	}
 	return project, nil
