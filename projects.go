@@ -97,7 +97,7 @@ func (c Cx1Client) ProjectInApplicationPollingByIDWithTimeout(projectId, applica
 		}
 		c.logger.Debugf("Project is not yet assigned to the application, polling")
 		time.Sleep(time.Duration(delaySeconds) * time.Second)
-		project, err = c.GetProjectByID(project.ProjectID)
+		project, err = c.GetProjectByID(projectId)
 		pollingCounter += delaySeconds
 	}
 	return project, nil
