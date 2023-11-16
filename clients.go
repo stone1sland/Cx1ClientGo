@@ -62,9 +62,11 @@ func (c Cx1Client) CreateClient(name, notificationEmail string, secretExpiration
 	body := map[string]interface{}{
 		"enabled": true,
 		"attributes": map[string]interface{}{
-			"lastUpdate":        time.Now().UnixMilli(),
-			"notificationEmail": notificationEmail,
-			"secretExpiration":  fmt.Sprintf("%d", secretExpiration),
+			"lastUpdate":                    time.Now().Unix(),
+			"client.secret.creation.time":   time.Now().Unix(),
+			"client.secret.expiration.time": time.Now().AddDate(0, 0, secretExpiration).Unix(),
+			"notificationEmail":             notificationEmail,
+			"secretExpiration":              fmt.Sprintf("%d", secretExpiration),
 		},
 		"redirectUris":           []string{},
 		"clientId":               name,
