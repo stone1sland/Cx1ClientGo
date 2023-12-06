@@ -361,24 +361,7 @@ func (c Cx1Client) GetUploadURL() (string, error) {
 }
 
 func (c Cx1Client) PutFile(URL string, filename string) (string, error) {
-	c.logger.Tracef("Putting file %v to %v", filename, URL)
-
-	fileContents, err := os.ReadFile(filename)
-	if err != nil {
-		c.logger.Tracef("Failed to Read the File %v: %s", filename, err)
-		return "", err
-	}
-
-	header := http.Header{}
-	header.Add("Content-Type", "application/zip")
-
-	cx1_req, err := c.createRequest(http.MethodPut, URL, bytes.NewReader(fileContents), &header, nil)
-	if err != nil {
-		return "", err
-	}
-	cx1_req.ContentLength = int64(len(fileContents))
-
-	res, err := c.httpClient.Do(cx1_req)
+	res, err := c.PutFileRaw(URL, filename)
 	if err != nil {
 		c.logger.Tracef("Error: %s", err)
 		return "", err
@@ -393,6 +376,27 @@ func (c Cx1Client) PutFile(URL string, filename string) (string, error) {
 	}
 
 	return string(resBody), nil
+}
+
+func (c Cx1Client) PutFileRaw(URL string, filename string) (*http.Response, error) {
+	c.logger.Tracef("Putting file %v to %v", filename, URL)
+
+	fileContents, err := os.ReadFile(filename)
+	if err != nil {
+		c.logger.Tracef("Failed to Read the File %v: %s", filename, err)
+		return nil, err
+	}
+
+	header := http.Header{}
+	header.Add("Content-Type", "application/zip")
+
+	cx1_req, err := c.createRequest(http.MethodPut, URL, bytes.NewReader(fileContents), &header, nil)
+	if err != nil {
+		return nil, err
+	}
+	cx1_req.ContentLength = int64(len(fileContents))
+
+	return c.httpClient.Do(cx1_req)
 }
 
 func (c Cx1Client) UploadBytesForProjectByID(projectID string, fileContents *[]byte) (string, error) {
