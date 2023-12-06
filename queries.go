@@ -810,6 +810,33 @@ func (c Cx1Client) GetQueries() (QueryCollection, error) {
 	return qc, err
 }
 
+func (c Cx1Client) GetQueryMappings() (map[uint64]uint64, error) {
+	var mapping map[uint64]uint64 = make(map[uint64]uint64)
+	var responsemap struct {
+		Mappings []struct {
+			AstId  uint64 `json:"astId,string"`
+			SastId uint64 `json:"sastId,string"`
+		} `json:"mappings"`
+	}
+
+	response, err := c.sendRequest(http.MethodGet, "/queries/mappings", nil, nil)
+	if err != nil {
+		return mapping, err
+	}
+
+	err = json.Unmarshal(response, &responsemap)
+	if err != nil {
+		return mapping, err
+	}
+
+	for _, qm := range responsemap.Mappings {
+		mapping[qm.SastId] = qm.AstId
+	}
+
+	return mapping, nil
+
+}
+
 // convenience
 func (c Cx1Client) GetSeverityID(severity string) uint {
 	switch strings.ToUpper(severity) {
