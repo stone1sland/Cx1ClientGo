@@ -330,9 +330,10 @@ type ScanMetadata struct {
 }
 
 type ScanResultSet struct {
-	SAST []ScanSASTResult
-	SCA  []ScanSCAResult
-	KICS []ScanKICSResult
+	SAST         []ScanSASTResult
+	SCA          []ScanSCAResult
+	SCAContainer []ScanSCAContainerResult
+	KICS         []ScanKICSResult
 }
 
 // generic data common to all
@@ -433,6 +434,21 @@ type ScanSCAResultPackageData struct {
 	URL     string
 	Type    string
 	Comment string
+}
+
+type ScanSCAContainerResult struct {
+	ScanResultBase
+	Data                 ScanSCAContainerResultData `json:"data"`
+	VulnerabilityDetails ScanSCAResultDetails
+}
+
+type ScanSCAContainerResultData struct {
+	Metadata struct {
+		Enrichers []string `json:"enrichers"`
+	} `json:"metadata"`
+	PackageName    string `json:"packageName"`
+	PackageVersion string `json:"packageVersion"`
+	PublishedAt    string `json:"publishedAt"`
 }
 
 type ScanStatusDetails struct {
