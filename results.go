@@ -79,6 +79,14 @@ func (c Cx1Client) GetScanResultsByID(scanID string, limit uint64) (ScanResultSe
 			} else {
 				ResultSet.KICS = append(ResultSet.KICS, KICSResult)
 			}
+		case "sca-container":
+			var SCACResult ScanSCAContainerResult
+			err := json.Unmarshal(jsonResult, &SCACResult)
+			if err != nil {
+				c.logger.Warnf("Failed to unmarshal result %v to SCAContainer type: %s", r["similarityId"].(string), err)
+			} else {
+				ResultSet.SCAContainer = append(ResultSet.SCAContainer, SCACResult)
+			}
 		default:
 			c.logger.Warnf("Unable to unmarshal result %v of unknown type %v", r["similarityId"].(string), r["type"].(string))
 		}
@@ -304,6 +312,10 @@ func (c Cx1Client) GetScanSASTResultSummary(results *ScanResultSet) ScanResultSu
 	}
 
 	return summary
+}
+
+func (s ScanResultSet) String() string {
+	return fmt.Sprintf("Result set with %d SAST, %d SCA, %d SCAContainer, and %d KICS results", len(s.SAST), len(s.SCA), len(s.SCAContainer), len(s.KICS))
 }
 
 func (s ScanResultStatusSummary) Total() uint64 {
