@@ -59,15 +59,15 @@ type ClientVars struct {
 }
 
 type AccessAssignment struct {
-	TenantID     string   `json:"tenantID"`
-	EntityID     string   `json:"entityID"`
-	EntityType   string   `json:"entityType"`
-	EntityName   string   `json:"entityName"`
-	EntityRoles  []string `json:"entityRoles"`
-	ResourceID   string   `json:"resourceID"`
-	ResourceType string   `json:"resourceType"`
-	ResourceName string   `json:"resourceName"`
-	CreatedAt    string   `json:"createdAt"`
+	TenantID     string               `json:"tenantID"`
+	EntityID     string               `json:"entityID"`
+	EntityType   string               `json:"entityType"`
+	EntityName   string               `json:"entityName"`
+	EntityRoles  []AccessAssignedRole `json:"entityRoles"`
+	ResourceID   string               `json:"resourceID"`
+	ResourceType string               `json:"resourceType"`
+	ResourceName string               `json:"resourceName"`
+	CreatedAt    string               `json:"createdAt"`
 }
 
 type AccessAssignedRole struct {
