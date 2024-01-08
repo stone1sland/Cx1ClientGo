@@ -70,6 +70,11 @@ type AccessAssignment struct {
 	CreatedAt    string   `json:"createdAt"`
 }
 
+type AccessAssignedRole struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type AccessibleResource struct {
 	ResourceID   string   `json:"resourceId"`
 	ResourceType string   `json:"resourceType"`
@@ -223,9 +228,13 @@ type QueryCollection struct {
 }
 
 type QueryUpdate struct { // used when saving queries in Cx1
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	Source string `json:"source"`
+	Name     string              `json:"name"`
+	Path     string              `json:"path"`
+	Source   string              `json:"source"`
+	Metadata QueryUpdateMetadata `json:"metadata"`
+}
+type QueryUpdateMetadata struct {
+	Severity uint `json:"severity"`
 }
 
 type ReportStatus struct {
