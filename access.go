@@ -23,7 +23,37 @@ func (c Cx1Client) GetAccessAssignmentByID(entityId, resourceId string) (AccessA
 
 func (c Cx1Client) AddAccessAssignment(access AccessAssignment) error {
 	c.logger.Debugf("Creating access assignment for entityId %v and resourceId %v", access.EntityID, access.ResourceID)
-	body, err := json.Marshal(access)
+
+	type AccessAssignmentPOST struct {
+		TenantID     string   `json:"tenantID"`
+		EntityID     string   `json:"entityID"`
+		EntityType   string   `json:"entityType"`
+		EntityName   string   `json:"entityName"`
+		EntityRoles  []string `json:"entityRoles"`
+		ResourceID   string   `json:"resourceID"`
+		ResourceType string   `json:"resourceType"`
+		ResourceName string   `json:"resourceName"`
+		CreatedAt    string   `json:"createdAt"`
+	}
+
+	roles := make([]string, 0)
+	for _, r := range access.EntityRoles {
+		roles = append(roles, r.Name)
+	}
+
+	accessPost := AccessAssignmentPOST{
+		TenantID:     access.TenantID,
+		EntityID:     access.EntityID,
+		EntityType:   access.EntityType,
+		EntityName:   access.EntityName,
+		EntityRoles:  roles,
+		ResourceID:   access.ResourceID,
+		ResourceType: access.ResourceType,
+		ResourceName: access.ResourceName,
+		CreatedAt:    access.CreatedAt,
+	}
+
+	body, err := json.Marshal(accessPost)
 	if err != nil {
 		return err
 	}
