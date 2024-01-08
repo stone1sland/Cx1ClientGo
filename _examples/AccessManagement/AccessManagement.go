@@ -141,10 +141,12 @@ func addAccessAssignments(cx1client *Cx1ClientGo.Cx1Client, user Cx1ClientGo.Use
 		ResourceID:   tenantId,
 		ResourceType: "tenant",
 		ResourceName: tenant,
+		EntityRoles:  []Cx1ClientGo.AccessAssignedRole{Cx1ClientGo.AccessAssignedRole{Name: "ast-scanner"}},
 		EntityID:     user.UserID,
 		EntityType:   "user",
 		EntityName:   "cx1clientgo_test",
 	}
+
 	err := cx1client.AddAccessAssignment(access)
 	if err != nil {
 		return fmt.Errorf("failed to assign access: %s", err)

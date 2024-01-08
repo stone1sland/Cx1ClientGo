@@ -59,15 +59,20 @@ type ClientVars struct {
 }
 
 type AccessAssignment struct {
-	TenantID     string   `json:"tenantID"`
-	EntityID     string   `json:"entityID"`
-	EntityType   string   `json:"entityType"`
-	EntityName   string   `json:"entityName"`
-	EntityRoles  []string `json:"entityRoles"`
-	ResourceID   string   `json:"resourceID"`
-	ResourceType string   `json:"resourceType"`
-	ResourceName string   `json:"resourceName"`
-	CreatedAt    string   `json:"createdAt"`
+	TenantID     string               `json:"tenantID"`
+	EntityID     string               `json:"entityID"`
+	EntityType   string               `json:"entityType"`
+	EntityName   string               `json:"entityName"`
+	EntityRoles  []AccessAssignedRole `json:"entityRoles"`
+	ResourceID   string               `json:"resourceID"`
+	ResourceType string               `json:"resourceType"`
+	ResourceName string               `json:"resourceName"`
+	CreatedAt    string               `json:"createdAt"`
+}
+
+type AccessAssignedRole struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type AccessibleResource struct {
@@ -223,9 +228,13 @@ type QueryCollection struct {
 }
 
 type QueryUpdate struct { // used when saving queries in Cx1
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	Source string `json:"source"`
+	Name     string              `json:"name"`
+	Path     string              `json:"path"`
+	Source   string              `json:"source"`
+	Metadata QueryUpdateMetadata `json:"metadata"`
+}
+type QueryUpdateMetadata struct {
+	Severity uint `json:"severity"`
 }
 
 type ReportStatus struct {

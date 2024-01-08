@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/cxpsemea/Cx1ClientGo"
@@ -31,7 +32,7 @@ func main() {
 	tenant := os.Args[3]
 	api_key := os.Args[4]
 
-	//proxyURL, _ := url.Parse("http://127.0.0.1:8080")
+	proxyURL, _ := url.Parse("http://127.0.0.1:8080")
 	transport := &http.Transport{}
 	transport.Proxy = http.ProxyURL(proxyURL)
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
@@ -44,26 +45,48 @@ func main() {
 		logger.Fatalf("Error creating client: %s", err)
 	}
 
-	project, err := cx1client.GetProjectByName("test-project")
+	logger.Info("Retrieving or creating test-project inside application test-application")
+
+	project, application, err := cx1client.GetOrCreateProjectInApplicationByName("test-project", "test-application")
 	if err != nil {
-		logger.Fatalf("Error getting project 'test-project': %s", err)
+		logger.Fatalf("Error getting or creating project 'test-project' under application 'test-application': %s", err)
 	}
 
+	logger.Infof("Retrieving last successful scan for %v", project.String())
 	lastscans, err := cx1client.GetLastScansByStatusAndID(project.ProjectID, 1, []string{"Completed"})
-	if err != nil {
-		logger.Fatalf("Error getting last scan: %s", err)
+	var lastscan Cx1ClientGo.Scan
+
+	if err == nil && len(lastscans) > 0 {
+		lastscan = lastscans[0]
+	} else {
+		if err != nil {
+			logger.Warnf("Error getting last completed scan: %s", err)
+		} else {
+			logger.Warnf("No successfully completed scans have been run for this project")
+		}
+		logger.Infof("Running a new scan")
+
+		sastScanConfig := Cx1ClientGo.ScanConfiguration{
+			ScanType: "sast",
+		}
+		lastscan, err = cx1client.ScanProjectGitByID(project.ProjectID, "https://github.com/michaelkubiaczyk/ssba", "master", []Cx1ClientGo.ScanConfiguration{sastScanConfig}, map[string]string{})
+		if err != nil {
+			logger.Fatalf("Failed to run a new scan: %s", err)
+		}
+		lastscan, err = cx1client.ScanPollingDetailed(&lastscan)
+		if err != nil {
+			logger.Fatalf("Scan failed with error: %s", err)
+		}
+		if lastscan.Status != "Completed" {
+			logger.Fatalf("Scan did not complete successfully.")
+		}
 	}
 
-	lastscan := lastscans[0]
+	logger.Infof("Starting Web-Audit session for last successful scan %v", lastscan.String())
 
 	session, err := cx1client.GetAuditSessionByID(project.ProjectID, lastscan.ScanID, false)
 	if err != nil {
 		logger.Fatalf("Error getting an audit session: %s", err)
-	}
-
-	application, err := cx1client.GetApplicationByName("test-application")
-	if err != nil {
-		logger.Fatalf("Error getting application 'test-application': %s", err)
 	}
 
 	corpOverride := newCorpOverride(cx1client, logger, session)
@@ -74,7 +97,7 @@ func main() {
 	logger.Infof("The following custom (not Cx-level) queries exist for project Id %v", project.ProjectID)
 	queries, err := cx1client.GetQueriesByLevelID("Project", project.ProjectID)
 	if err != nil {
-		logger.Warnf("Failed to get queries for project: %s", err)
+		logger.Errorf("Failed to get queries for project: %s", err)
 	} else {
 		for _, q := range queries {
 			if q.Level != "Cx" {
@@ -85,23 +108,24 @@ func main() {
 
 	err = cx1client.DeleteQuery(projOverride)
 	if err != nil {
-		logger.Warnf("Failed to delete project query %v: %s", projOverride.String(), err)
+		logger.Errorf("Failed to delete project query %v: %s", projOverride.String(), err)
 	}
 	err = cx1client.DeleteQuery(appOverride)
 	if err != nil {
-		logger.Warnf("Failed to delete application query %v: %s", appOverride.String(), err)
+		logger.Errorf("Failed to delete application query %v: %s", appOverride.String(), err)
 	}
 	err = cx1client.DeleteQuery(corpOverride)
 	if err != nil {
-		logger.Warnf("Failed to delete corp query %v: %s", corpOverride.String(), err)
+		logger.Errorf("Failed to delete corp query %v: %s", corpOverride.String(), err)
 	}
 	err = cx1client.DeleteQuery(corpQuery)
 	if err != nil {
-		logger.Warnf("Failed to delete corp query %v: %s", corpQuery.String(), err)
+		logger.Errorf("Failed to delete corp query %v: %s", corpQuery.String(), err)
 	}
 }
 
 func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session string) Cx1ClientGo.AuditQuery {
+	logger.Infof("Creating corp override under session %v", session)
 	// First query: Tenant-level override of an existing query
 	baseQuery, err := cx1client.GetQueryByName("Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
@@ -121,7 +145,7 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, se
 		logger.Fatalf("Error while polling compiler: %s", err)
 	}
 
-	err = cx1client.UpdateQuery(newCorpOverride)
+	err = cx1client.AuditUpdateQuery(session, newCorpOverride)
 	if err != nil {
 		logger.Fatalf("Error saving new query: %s", err)
 	} else {
@@ -138,12 +162,13 @@ func newCorpOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, se
 }
 
 func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session, applicationId string) Cx1ClientGo.AuditQuery {
+	logger.Infof("Creating application-level override under session %v", session)
 	// First query: Tenant-level override of an existing query
 	baseQuery, err := cx1client.GetQueryByName("Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
 		logger.Fatalf("Error getting query: %s", err)
 	}
-	// Second query: project-level override of existing query
+	// Second query: app-level override of existing query
 	cx1client.AuditSessionKeepAlive(session)
 	newApplicationOverride := baseQuery.CreateProjectOverrideByID(applicationId)
 	newApplicationOverride.Source = "result = base.Spring_Missing_Expect_CT_Header(); // project override"
@@ -158,7 +183,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 		logger.Fatalf("Error while polling compiler: %s", err)
 	}
 
-	err = cx1client.UpdateQuery(newApplicationOverride)
+	err = cx1client.AuditUpdateQuery(session, newApplicationOverride)
 	if err != nil {
 		logger.Fatalf("Error saving new query: %s", err)
 	} else {
@@ -175,6 +200,7 @@ func newApplicationOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Log
 }
 
 func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session, projectId string) Cx1ClientGo.AuditQuery {
+	logger.Infof("Creating project override under session %v", session)
 	// First query: Tenant-level override of an existing query
 	baseQuery, err := cx1client.GetQueryByName("Cx", "Java", "Java_Spring", "Spring_Missing_Expect_CT_Header")
 	if err != nil {
@@ -195,7 +221,7 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 		logger.Fatalf("Error while polling compiler: %s", err)
 	}
 
-	err = cx1client.UpdateQuery(newProjectOverride)
+	err = cx1client.AuditUpdateQuery(session, newProjectOverride)
 	if err != nil {
 		logger.Fatalf("Error saving new query: %s", err)
 	} else {
@@ -212,6 +238,7 @@ func newProjectOverride(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger,
 }
 
 func newCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, session string) Cx1ClientGo.AuditQuery {
+	logger.Infof("Creating new corp query under session %v", session)
 	// Third query: create new corp/tenant query
 	cx1client.AuditSessionKeepAlive(session)
 	newQuery, err := cx1client.AuditNewQuery("Java", "Java_Spring", "TestQuery")
@@ -236,7 +263,7 @@ func newCorpQuery(cx1client *Cx1ClientGo.Cx1Client, logger *logrus.Logger, sessi
 		logger.Fatalf("Error while polling compiler: %s", err)
 	}
 
-	err = cx1client.UpdateQuery(newQuery)
+	err = cx1client.AuditUpdateQuery(session, newQuery)
 	if err != nil {
 		logger.Fatalf("Error creating new corp query: %s", err)
 	} else {
