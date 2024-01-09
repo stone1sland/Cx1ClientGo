@@ -22,7 +22,8 @@ type Cx1Client struct {
 
 type Cx1Claims struct {
 	jwt.RegisteredClaims
-	Cx1License ASTLicense `json:"ast-license"`
+	Cx1License    ASTLicense `json:"ast-license"`
+	IsServiceUser string     `json:"is-service-user"`
 }
 type ASTLicense struct {
 	ID          int
