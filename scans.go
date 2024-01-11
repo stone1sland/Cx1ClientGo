@@ -125,7 +125,7 @@ func (c Cx1Client) GetScanSummaryCounter() ([]ScanSummaryCount, error) {
 		c.logger.Trace("Failed to get scan status counters")
 		return scanSummaryCount, err
 	}
-	err = json.Unmarshal([]byte(data), &scanSummaryCount)
+	err = json.Unmarshal(data, &scanSummaryCount)
 	return scanSummaryCount, err
 }
 
