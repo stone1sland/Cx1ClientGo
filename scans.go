@@ -115,18 +115,23 @@ func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]Configu
 	return scanConfigurations, err
 }
 
-func (c Cx1Client) GetScanSummaryCounter() ([]ScanSummaryCount, error) {
+func (c Cx1Client) GetScanSummaryCounter() (ScanSummaryCount, error) {
 	c.logger.Debug("Getting scan status counters")
-	var scanSummaryCount []ScanSummaryCount
+
+	var scanSummaryCount ScanSummaryCount
 
 	data, err := c.sendRequest(http.MethodGet, "/scans/summary", nil, nil)
-
 	if err != nil {
 		c.logger.Trace("Failed to get scan status counters")
 		return scanSummaryCount, err
 	}
+
 	err = json.Unmarshal([]byte(data), &scanSummaryCount)
-	return scanSummaryCount, err
+	if err != nil {
+		return scanSummaryCount, err
+	}
+
+	return scanSummaryCount, nil
 }
 
 func (c Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
