@@ -119,13 +119,13 @@ func (c Cx1Client) GetScanSummaryCounter() ([]ScanSummaryCount, error) {
 	c.logger.Debug("Getting scan status counters")
 	var scanSummaryCount []ScanSummaryCount
 
-	data, err := c.sendRequest(http.MethodGet, fmt.Sprint("/scans/summary"), nil, nil)
+	data, err := c.sendRequest(http.MethodGet, "/scans/summary", nil, nil)
 
 	if err != nil {
 		c.logger.Trace("Failed to get scan status counters")
 		return scanSummaryCount, err
 	}
-	err = json.Unmarshal(data, &scanSummaryCount)
+	err = json.Unmarshal([]byte(data), &scanSummaryCount)
 	return scanSummaryCount, err
 }
 
