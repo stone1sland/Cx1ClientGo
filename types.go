@@ -546,3 +546,14 @@ type WorkflowLog struct {
 	Info      string `json:"Info"`
 	Timestamp string `json:"Timestamp"`
 }
+
+type ScanSummaryCount struct {
+	Status struct {
+		Canceled  int `json:"Canceled,omitempty"`
+		Completed int `json:"Completed,omitempty"`
+		Failed    int `json:"Failed,omitempty"`
+		Partial   int `json:"Partial,omitempty"`
+		Queued    int `json:"Queued,omitempty"`
+		Running   int `json:"Running,omitempty"`
+	} `json:"Status"`
+}
