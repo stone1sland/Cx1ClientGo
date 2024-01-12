@@ -320,6 +320,10 @@ func (c Cx1Client) GetLicense() ASTLicense {
 	return c.claims.Cx1License
 }
 
+func (c Cx1Client) GetClaims() Cx1Claims {
+	return c.claims
+}
+
 func (c Cx1Client) IsEngineAllowed(engine string) bool {
 	for _, eng := range c.claims.Cx1License.LicenseData.AllowedEngines {
 		if strings.EqualFold(engine, eng) {

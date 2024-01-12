@@ -115,9 +115,18 @@ func (c Cx1Client) GetScanConfigurationByID(projectID, scanID string) ([]Configu
 	return scanConfigurations, err
 }
 
-func (c Cx1Client) GetScanSummary(scanID string) (ScanSummary, error) {
-	c.depwarn("GetScanSummary", "GetScanSummaryByID")
-	return c.GetScanSummaryByID(scanID)
+func (c Cx1Client) GetScansSummary() (ScanStatusSummary, error) {
+	var summaryResponse struct {
+		Status ScanStatusSummary
+	}
+
+	data, err := c.sendRequest(http.MethodGet, "/scans/summary", nil, http.Header{})
+	if err != nil {
+		return summaryResponse.Status, err
+	}
+
+	err = json.Unmarshal(data, &summaryResponse)
+	return summaryResponse.Status, err
 }
 
 func (c Cx1Client) GetScanSummaryByID(scanID string) (ScanSummary, error) {
@@ -432,4 +441,8 @@ func (c Cx1Client) UploadBytes(fileContents *[]byte) (string, error) {
 
 func (s *Scan) String() string {
 	return fmt.Sprintf("[%v] %v", ShortenGUID(s.ScanID), s.ProjectName)
+}
+
+func (s ScanStatusSummary) String() string {
+	return fmt.Sprintf("Summary of all scan statuses: %d running, %d completed, %d canceled, %d failed", s.Running, s.Completed, s.Canceled, s.Failed)
 }
