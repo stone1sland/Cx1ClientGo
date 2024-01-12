@@ -482,6 +482,13 @@ type ScanResultSummary struct {
 	Information ScanResultStatusSummary
 }
 
+type ScanStatusSummary struct {
+	Canceled  uint64
+	Completed uint64
+	Failed    uint64
+	Running   uint64
+}
+
 // Very simplified for now
 type ScanSummary struct {
 	TenantID     string
