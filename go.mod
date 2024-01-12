@@ -1,4 +1,4 @@
-module github.com/cxpsemea/Cx1ClientGo
+module github.com/stone1sland/Cx1ClientGo
 
 go 1.19
 
