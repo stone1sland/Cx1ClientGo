@@ -485,6 +485,8 @@ type ScanResultSummary struct {
 type ScanStatusSummary struct {
 	Canceled  uint64
 	Completed uint64
+	Partial   uint64
+	Queued    uint64
 	Failed    uint64
 	Running   uint64
 }

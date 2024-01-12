@@ -444,5 +444,5 @@ func (s *Scan) String() string {
 }
 
 func (s ScanStatusSummary) String() string {
-	return fmt.Sprintf("Summary of all scan statuses: %d running, %d completed, %d canceled, %d failed", s.Running, s.Completed, s.Canceled, s.Failed)
+	return fmt.Sprintf("Summary of all scan statuses: %d queued, %d running, %d completed, %d partial, %d canceled, %d failed", s.Queued, s.Running, s.Completed, s.Partial, s.Canceled, s.Failed)
 }
