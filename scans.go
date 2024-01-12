@@ -443,6 +443,6 @@ func (s *Scan) String() string {
 	return fmt.Sprintf("[%v] %v", ShortenGUID(s.ScanID), s.ProjectName)
 }
 
-func (s ScanStatusSummary) String() string {
-	return fmt.Sprintf("Summary of all scan statuses: %d queued, %d running, %d completed, %d partial, %d canceled, %d failed", s.Queued, s.Running, s.Completed, s.Partial, s.Canceled, s.Failed)
-}
+// func (s ScanStatusSummary) String() string {
+// 	return fmt.Sprintf("Summary of all scan statuses: %d queued, %d running, %d completed, %d partial, %d canceled, %d failed", s.Queued, s.Running, s.Completed, s.Partial, s.Canceled, s.Failed)
+// }
